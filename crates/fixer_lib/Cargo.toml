@@ -1,0 +1,12 @@
+[package]
+name = "fixer_lib"
+version.workspace = true
+edition.workspace = true
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[dependencies]
+models = { path = "../fixer_models", package = "fixer_models" }
+tracing.workspace = true
+thiserror.workspace = true

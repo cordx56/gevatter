@@ -1,0 +1,13 @@
+[package]
+name = "fixer_driver"
+version.workspace = true
+edition.workspace = true
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[dependencies]
+fixer_lib = { path = "../fixer_lib" }
+
+tracing-subscriber.workspace = true
+anyhow.workspace = true

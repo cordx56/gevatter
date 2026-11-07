@@ -1,0 +1,9 @@
+[package]
+name = "fixer_models"
+version.workspace = true
+edition.workspace = true
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[dependencies]
