@@ -1,5 +1,5 @@
 [package]
-name = "fixer_lib"
+name = "gevatter_lib"
 version.workspace = true
 edition.workspace = true
 
@@ -7,6 +7,6 @@ edition.workspace = true
 rustc_private = true
 
 [dependencies]
-models = { path = "../fixer_models", package = "fixer_models" }
+models = { path = "../gevatter_models", package = "gevatter_models" }
 tracing.workspace = true
 thiserror.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "fixer_models"
+name = "gevatter_driver"
 version.workspace = true
 edition.workspace = true
 
@@ -7,3 +7,7 @@ edition.workspace = true
 rustc_private = true
 
 [dependencies]
+gevatter_lib = { path = "../gevatter_lib" }
+
+tracing-subscriber.workspace = true
+anyhow.workspace = true

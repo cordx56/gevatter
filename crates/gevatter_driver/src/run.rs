@@ -1,4 +1,4 @@
-use fixer_lib::driver;
+use gevatter_lib::driver;
 use std::{env, process::ExitCode};
 
 pub fn run_compiler() -> ExitCode {
