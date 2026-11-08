@@ -58,15 +58,25 @@ impl Callbacks for FixerRustc {
     ) -> rustc_driver::Compilation {
         let current_phase = Phase::current_phase();
         match current_phase {
+            Some(Phase::AnalyzeAndFix) => {
+                tracing::info!("phase {}: analyze and fix", Phase::AnalyzeAndFix as u8);
+            }
             Some(Phase::Verification) => {
-                // nothing to do
+                tracing::info!("phase {}: verification", Phase::Verification as u8);
+                // TODO: verification phase!
             }
             _ => {
-                tracing::info!("start freshen phase");
-                let edits = editors::freshen::freshen_annotations(tcx);
+                tracing::info!(
+                    "phase {}: annotation freshen",
+                    Phase::AnnotationFreshen as u8
+                );
+                let mut edits = editors::freshen::freshen_annotations(tcx);
                 tracing::info!("{} edits to apply", edits.len());
-                if let Err(e) = editors::apply_to_file(&edits) {
-                    tracing::warn!("file edit error: {e:?}");
+                if let Err(_) = editors::make_temporary(&mut edits) {
+                    tracing::error!("failed to setup temporary file");
+                }
+                if let Err(_) = editors::apply_to_file(&edits) {
+                    tracing::warn!("failed to edit file");
                 }
                 if let Err(e) = self.re_exec(Phase::AnnotationFreshen.next_phase().unwrap()) {
                     tracing::error!("process exec error: {e:?}");

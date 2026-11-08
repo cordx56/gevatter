@@ -1,12 +1,12 @@
 use crate::{
-    Span,
     hir::{FnSig, Generics, def_id::LocalDefId},
     span::{Ident, SourceFile},
 };
 use std::collections::BTreeMap;
-use std::fs::OpenOptions;
+use std::env;
+use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub mod collectors;
@@ -15,7 +15,7 @@ pub mod simplify;
 pub mod strip;
 
 /// A pending edit to apply
-/// Replace start..end with `replace_with`
+/// Replace range of `span` with `replace_with`
 #[derive(Clone, Debug)]
 pub struct Edit {
     pub file: PathBuf,
@@ -97,7 +97,7 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
             .push(edit.clone());
     }
     for (path, edits) in grouped {
-        let file = match OpenOptions::new().read(true).open(path) {
+        let file = match fs::OpenOptions::new().read(true).open(path) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to open file {path:?}: {e:?}");
@@ -118,7 +118,7 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
                 return Ok(());
             }
         };
-        let mut file = match OpenOptions::new().write(true).truncate(true).open(path) {
+        let mut file = match fs::OpenOptions::new().write(true).truncate(true).open(path) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to open file {path:?}: {e:?}");
@@ -131,4 +131,33 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
         }
     }
     Ok(())
+}
+pub fn make_temporary(edits: &mut [Edit]) -> io::Result<()> {
+    let out_dir = edit_out_dir();
+    for edit in edits {
+        let file = out_dir.join(&edit.file);
+        if !file.is_file() {
+            let parent = file.parent().expect("invalid file path");
+            if let Err(e) = fs::create_dir_all(parent) {
+                tracing::error!("failed to create out dir {parent:?}: {e:?}");
+            }
+            if let Err(e) = fs::copy(&edit.file, &file) {
+                tracing::error!("failed to copy source file to dest: {e:?}");
+            }
+        }
+        edit.file = file;
+    }
+    Ok(())
+}
+
+pub fn edit_out_dir() -> PathBuf {
+    match env::var("CARGO_TARGET_DIR") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => {
+            tracing::warn!("failed to read `$CARGO_TARGET_DIR`; fallback to ./target");
+            PathBuf::from("./target")
+        }
+    }
+    .join("gevatter")
+    .join("source")
 }

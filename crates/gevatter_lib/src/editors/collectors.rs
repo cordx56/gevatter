@@ -13,18 +13,19 @@ use crate::{
 use models::SkipReason;
 use std::path::PathBuf;
 
-pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
+pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
     let mut target_funcs = Vec::new();
 
     for owner in tcx.hir_crate_items(()).owners() {
         let def_id = owner.def_id;
-        tracing::trace!("collecting function {def_id:?}");
+        let def_path = tcx.def_path_str(def_id.to_def_id());
 
         // TODO: comment
         if !matches!(tcx.def_kind(def_id), DefKind::Fn | DefKind::AssocFn) {
-            tracing::trace!("DefKind is not Fn or AssocFn; skip");
+            tracing::trace!("{def_path}'s DefKind is not Fn or AssocFn; skip");
             continue;
         }
+        tracing::trace!("collecting function {def_path}");
 
         // TODO: comment
         let (signature, generics, ident) = match tcx.hir_node_by_def_id(def_id) {
@@ -50,7 +51,8 @@ pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
 
         let mut skipped = Vec::new();
         let parent = tcx.local_parent(def_id);
-        tracing::trace!("parent of {def_id:?} is {parent:?}");
+        let parent_def_path = tcx.def_path_str(parent);
+        tracing::trace!("parent of {def_path} is {parent_def_path}");
         let parent_generics = match tcx.hir_node_by_def_id(parent) {
             Node::Item(item) => match item.kind {
                 ItemKind::Impl(item) => {
@@ -84,6 +86,7 @@ pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
 
         // TODO: we do not treat async fn, future work
         if signature.header.is_async() {
+            tracing::trace!("{def_path} is async, skip; TODO: future work!");
             skipped.push(SkipReason::AsyncFn);
         }
 
@@ -98,6 +101,7 @@ pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
             || ident.span.from_expansion()
             || generics.span.from_expansion()
         {
+            tracing::trace!("{def_path}'s signature is macro-expanded; skip");
             skipped.push(SkipReason::MacroExpanded);
         }
 
@@ -110,6 +114,7 @@ pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
             _ => None,
         };
         if file.is_none() {
+            tracing::trace!("file not found on local; skip");
             skipped.push(SkipReason::Unknown);
         }
         let mut unsafe_check = UnsafeCheck {
@@ -123,16 +128,19 @@ pub fn collect_functions<'tcx>(tcx: TyCtxt<'tcx>) -> Vec<TargetFunc> {
             unsafe_check.visit_body(body);
         }
         if unsafe_check.exists {
+            tracing::trace!("body has unsafe; skip");
             skipped.push(SkipReason::UnsafeBody);
         }
 
-        // TODO: push
-        tracing::trace!("{def_id:?} is target; register");
+        tracing::trace!(
+            "register {def_path} as a target; note: skip: {}",
+            !skipped.is_empty()
+        );
         target_funcs.push(TargetFunc {
             file: file.unwrap_or_default(),
             source,
             def_id,
-            def_path: tcx.def_path_str(def_id.to_def_id()),
+            def_path,
             skipped,
             ident,
             signature,

@@ -40,10 +40,8 @@ pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
                         .iter()
                         .flat_map(|generics| generics.params.iter()),
                 )
-                .filter_map(|param| {
-                    matches!(param.kind, GenericParamKind::Lifetime { .. })
-                        .then_some(param.name.ident().to_string())
-                })
+                .filter(|param| matches!(param.kind, GenericParamKind::Lifetime { .. }))
+                .map(|param| param.name.ident().to_string())
                 .chain(
                     impls
                         .get(&tcx.local_parent(target.def_id))
@@ -61,13 +59,18 @@ pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
 
             for predicate in target.generics.predicates {
                 if let hir::WherePredicateKind::BoundPredicate(bound) = predicate.kind
-                    && bound.origin == hir::PredicateOrigin::ImplTrait
+                    && matches!(bound.origin, hir::PredicateOrigin::ImplTrait)
                 {
                     collector.skipped().visit_where_predicate(predicate);
                 }
             }
 
             if !collector.report.introduced.is_empty() {
+                tracing::trace!(
+                    "introduced annotations for {}: {:?}",
+                    collector.report.def_path,
+                    collector.report.introduced
+                );
                 let names = collector
                     .report
                     .introduced
@@ -88,6 +91,8 @@ pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
                     _ => (target.ident.span.shrink_to_hi(), format!("<{names}>")),
                 };
                 collector.push_edit(span, replace_with);
+            } else {
+                tracing::trace!("no annotation introduced for {}", collector.report.def_path);
             }
 
             report = collector.report;
@@ -403,13 +408,17 @@ impl<'hir> Visitor<'hir> for Collector {
         intravisit::walk_generic_args(self, args)
     }
     fn visit_lifetime(&mut self, lifetime: &'hir hir::Lifetime) -> Self::Result {
-        if lifetime.kind == hir::LifetimeKind::ImplicitObjectLifetimeDefault {
+        if matches!(
+            lifetime.kind,
+            hir::LifetimeKind::ImplicitObjectLifetimeDefault
+        ) {
             self.skipped().visit_lifetime(lifetime)
-        } else {
+        } else if is_target(lifetime) {
             let name = self.fresh();
             let (span, replace) = lifetime.suggestion(&name.to_string());
             self.push_edit(span, replace);
         }
+        intravisit::walk_lifetime(self, lifetime)
     }
 }
 
