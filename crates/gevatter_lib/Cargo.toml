@@ -8,5 +8,6 @@ rustc_private = true
 
 [dependencies]
 models = { path = "../gevatter_models", package = "gevatter_models" }
+cargo_metadata.workspace = true
 tracing.workspace = true
 thiserror.workspace = true

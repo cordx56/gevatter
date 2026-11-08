@@ -1,12 +1,14 @@
 use crate::{
     hir::{FnSig, Generics, def_id::LocalDefId},
-    span::{Ident, SourceFile},
+    span::{
+        Ident, SourceFile,
+        source_map::{FileLoader, RealFileLoader},
+    },
 };
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub mod collectors;
@@ -97,14 +99,7 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
             .push(edit.clone());
     }
     for (path, edits) in grouped {
-        let file = match fs::OpenOptions::new().read(true).open(path) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("failed to open file {path:?}: {e:?}");
-                return Err(e);
-            }
-        };
-        let source = match io::read_to_string(file) {
+        let source = match TemporaryFileLoader.read_file(path) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to read file {path:?}: {e:?}");
@@ -118,46 +113,70 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
                 return Ok(());
             }
         };
-        let mut file = match fs::OpenOptions::new().write(true).truncate(true).open(path) {
+        TemporaryFileLoader.write_file(path, edited.as_bytes())?;
+    }
+    Ok(())
+}
+
+pub fn edit_out_dir() -> PathBuf {
+    crate::toolchain::target_dir().join("source")
+}
+
+pub struct TemporaryFileLoader;
+impl TemporaryFileLoader {
+    fn ensure_temp_path(&self, path: &Path) -> io::Result<PathBuf> {
+        let out_dir = edit_out_dir();
+        let relative = if path.is_absolute() {
+            path.trim_prefix(self.current_directory()?)
+        } else {
+            path
+        };
+        let temp_path = out_dir.join(relative);
+        if !temp_path.is_file() {
+            let parent = temp_path.parent().expect("invalid file path");
+            if let Err(e) = fs::create_dir_all(parent) {
+                tracing::error!("failed to create out dir {parent:?}: {e:?}");
+                return Err(e);
+            }
+            if let Err(e) = fs::copy(&relative, &temp_path) {
+                tracing::error!("failed to copy source file to dest: {e:?}");
+                return Err(e);
+            }
+        }
+        Ok(temp_path)
+    }
+    pub fn write_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        let temp_path = self.ensure_temp_path(path)?;
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(temp_path)
+        {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to open file {path:?}: {e:?}");
                 return Err(e);
             }
         };
-        if let Err(e) = file.write_all(edited.as_bytes()) {
+        if let Err(e) = file.write_all(bytes) {
             tracing::error!("failed to write file {path:?}: {e:?}");
             return Err(e);
         }
+        Ok(())
     }
-    Ok(())
 }
-pub fn make_temporary(edits: &mut [Edit]) -> io::Result<()> {
-    let out_dir = edit_out_dir();
-    for edit in edits {
-        let file = out_dir.join(&edit.file);
-        if !file.is_file() {
-            let parent = file.parent().expect("invalid file path");
-            if let Err(e) = fs::create_dir_all(parent) {
-                tracing::error!("failed to create out dir {parent:?}: {e:?}");
-            }
-            if let Err(e) = fs::copy(&edit.file, &file) {
-                tracing::error!("failed to copy source file to dest: {e:?}");
-            }
-        }
-        edit.file = file;
+impl FileLoader for TemporaryFileLoader {
+    fn file_exists(&self, path: &Path) -> bool {
+        RealFileLoader.file_exists(path)
     }
-    Ok(())
-}
-
-pub fn edit_out_dir() -> PathBuf {
-    match env::var("CARGO_TARGET_DIR") {
-        Ok(v) => PathBuf::from(v),
-        Err(_) => {
-            tracing::warn!("failed to read `$CARGO_TARGET_DIR`; fallback to ./target");
-            PathBuf::from("./target")
-        }
+    fn read_file(&self, path: &Path) -> io::Result<String> {
+        let temp_path = self.ensure_temp_path(path)?;
+        fs::read_to_string(&temp_path)
     }
-    .join("gevatter")
-    .join("source")
+    fn read_binary_file(&self, path: &Path) -> io::Result<Arc<[u8]>> {
+        RealFileLoader.read_binary_file(path)
+    }
+    fn current_directory(&self) -> io::Result<PathBuf> {
+        RealFileLoader.current_directory()
+    }
 }
