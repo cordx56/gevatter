@@ -1,20 +1,36 @@
 use gevatter_lib::driver;
 use std::{env, process::ExitCode};
 
+fn option_values<'a>(args: &'a [String], key: &'a str) -> impl Iterator<Item = &'a str> {
+    args.iter().enumerate().filter_map(move |(index, arg)| {
+        if arg == key {
+            args.get(index + 1).map(String::as_str)
+        } else {
+            arg.strip_prefix(key)
+                .and_then(|rest| rest.strip_prefix('='))
+        }
+    })
+}
+
+fn is_passthrough(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| arg == "-vV" || arg == "--version" || arg.starts_with("--print"))
+        // FIXME: we would like to avoid this;
+        || option_values(args, "--crate-name").any(|name| name.starts_with("build_script_"))
+        || option_values(args, "--crate-type")
+            .flat_map(|types| types.split(','))
+            .any(|crate_type| crate_type == "proc-macro")
+}
+
 pub fn run_compiler() -> ExitCode {
     let original_args: Vec<_> = env::args().collect();
-    let args: Vec<String>;
-
-    if original_args.first() == original_args.get(1) {
-        args = original_args.iter().skip(1).map(|v| v.to_owned()).collect();
-    } else {
+    if original_args.first() != original_args.get(1) {
         return driver::run(&original_args, &mut driver::DefaultRustc);
     }
 
-    for arg in &args {
-        if arg == "-vV" || arg == "--version" || arg.starts_with("--print") {
-            return driver::run(&args, &mut driver::DefaultRustc);
-        }
+    let args: Vec<String> = original_args.iter().skip(1).cloned().collect();
+    if is_passthrough(&args) {
+        return driver::run(&args, &mut driver::DefaultRustc);
     }
 
     driver::run(&args, &mut driver::GevatterDriver::new(&original_args))
