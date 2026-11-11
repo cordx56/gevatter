@@ -9,17 +9,6 @@ pub struct FixRound {
     pub edits: Vec<crate::Edit>,
     pub functions: Vec<FunctionReport>,
 }
-impl FixRound {
-    pub fn without_fixpoint(mut self) -> Self {
-        self.functions
-            .iter_mut()
-            .filter(|function| matches!(function.status, FunctionStatus::Fixed))
-            .for_each(|function| {
-                function.status = FunctionStatus::Unfixable(UnfixableReason::NoFixpoint)
-            });
-        self
-    }
-}
 
 pub fn outlive_report_edits(
     reports: &IndexMap<LocalDefId, OutliveRelationReport>,
@@ -100,4 +89,38 @@ fn where_edit(insertion: &WhereInsertion, relations: &[LifetimeRelation]) -> cra
         span: insertion.position,
         replace_with: format!("{}{predicates}", insertion.separator),
     }
+}
+
+pub fn verify_reports(
+    reports: &IndexMap<LocalDefId, OutliveRelationReport>,
+    locations: &IndexMap<LocalDefId, PredicateLocation>,
+) -> Vec<FunctionReport> {
+    reports
+        .iter()
+        .map(|(def_id, report)| {
+            let location = locations.get(def_id);
+            let status = if let Some(unnamed) = report.required.iter().find(|r| r.named().is_none())
+            {
+                FunctionStatus::Unfixable(UnfixableReason::UnnamedRegion(unnamed.clone()))
+            } else if !report.required.is_empty()
+                && matches!(location, Some(PredicateLocation::Insertable(_)))
+            {
+                FunctionStatus::Unfixable(UnfixableReason::NoFixpoint)
+            } else if !report.required.is_empty()
+                || report.had_diagnostics
+                || report.borrowck_skipped.is_some()
+            {
+                FunctionStatus::Unfixable(UnfixableReason::DiagnosticsRemain)
+            } else if let Some(PredicateLocation::Skipped(reasons)) = location {
+                FunctionStatus::Skipped(reasons.clone())
+            } else {
+                FunctionStatus::Unchanged
+            };
+            FunctionReport {
+                def_path: report.def_path.clone(),
+                status,
+                where_added: Vec::new(),
+            }
+        })
+        .collect()
 }

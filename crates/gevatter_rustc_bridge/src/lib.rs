@@ -2,13 +2,17 @@
 
 pub extern crate rustc_borrowck;
 pub extern crate rustc_hir;
+pub extern crate rustc_interface;
 pub extern crate rustc_middle;
+pub extern crate rustc_session;
 pub extern crate rustc_span;
 
 pub use middle::ty::TyCtxt;
 pub use rustc_borrowck::consumers as borrowck;
 pub use rustc_hir as hir;
+pub use rustc_interface as interface;
 pub use rustc_middle as middle;
+pub use rustc_session as session;
 pub use rustc_span as span;
 
 pub trait FromRustc<T> {

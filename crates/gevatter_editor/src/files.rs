@@ -1,10 +1,14 @@
-use rustc_span::source_map::{FileLoader, RealFileLoader};
+use bridge::{
+    TyCtxt,
+    hir::def_id::LOCAL_CRATE,
+    span::source_map::{FileLoader, RealFileLoader},
+};
 
 use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 pub static CARGO_METADATA: LazyLock<Option<cargo_metadata::Metadata>> =
     LazyLock::new(|| cargo_metadata::MetadataCommand::new().exec().ok());
@@ -38,8 +42,21 @@ pub static TARGET_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     }
 });
 
+static UNIT: OnceLock<String> = OnceLock::new();
+fn ensure_unit_path(crate_name: &str, extra_filename: &str) {
+    UNIT.get_or_init(|| format!("{crate_name}{extra_filename}"));
+}
+
+fn unit_out_dir() -> PathBuf {
+    TARGET_DIR
+        .join("gevatter")
+        .join(UNIT.get().expect("temporary file path is not initialized"))
+}
 pub fn edit_out_dir() -> PathBuf {
-    TARGET_DIR.join("gevatter").join("source")
+    unit_out_dir().join("source")
+}
+pub fn report_path() -> PathBuf {
+    unit_out_dir().join("report.json")
 }
 pub fn mirror_of(path: &Path) -> io::Result<Option<(PathBuf, PathBuf)>> {
     let original = fs::canonicalize(path)?;
@@ -67,8 +84,18 @@ fn ensure_mirror(path: &Path) -> io::Result<Option<PathBuf>> {
 
 pub struct TemporaryFileLoader;
 impl TemporaryFileLoader {
+    pub fn ensure_unit_path(conf: &bridge::interface::Config) -> PathBuf {
+        let krate = conf
+            .opts
+            .crate_name
+            .as_deref()
+            .unwrap_or_else(|| conf.input.filestem());
+        let extra_filename = &conf.opts.cg.extra_filename;
+        ensure_unit_path(&krate, extra_filename);
+        unit_out_dir()
+    }
     pub fn ensure_temp_refresh() -> PathBuf {
-        let out_dir = edit_out_dir();
+        let out_dir = unit_out_dir();
         let _ = fs::remove_dir_all(&out_dir);
         out_dir
     }

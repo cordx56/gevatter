@@ -19,3 +19,4 @@ pub use rustc_span::{self as span, Ident, Span};
 
 pub mod driver;
 pub mod fix;
+pub mod report;

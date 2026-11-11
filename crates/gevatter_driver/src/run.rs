@@ -33,5 +33,5 @@ pub fn run_compiler() -> ExitCode {
         return driver::run(&args, &mut driver::DefaultRustc);
     }
 
-    driver::run(&args, &mut driver::GevatterDriver::new(&original_args))
+    driver::GevatterDriver::new(&original_args).run(&args)
 }

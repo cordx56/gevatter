@@ -101,12 +101,17 @@ dependencies = [
  "gevatter_analyzer",
  "gevatter_editor",
  "gevatter_models",
+ "gevatter_rustc_bridge",
+ "serde_json",
  "tracing",
 ]
 
 [[package]]
 name = "gevatter_models"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "gevatter_rustc_bridge"

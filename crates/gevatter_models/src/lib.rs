@@ -1,6 +1,9 @@
 /// Common models which are used in Gevatter crates
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[serde(transparent)]
 pub struct Region(u32);
 impl Region {
     pub fn as_u32(&self) -> u32 {
@@ -37,7 +40,8 @@ impl std::fmt::Display for RegionName {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum RegionKind {
     Static,
     EarlyBound,
@@ -46,7 +50,8 @@ pub enum RegionKind {
     Anonymous,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum SkipReason {
     WellFormednessErrors,
     ObjectLifetimeDefault,
@@ -75,7 +80,8 @@ impl Span {
 }
 
 /// Named lifetime annotation
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[serde(into = "String", from = "String")]
 pub struct LifetimeAnnotation(String);
 impl LifetimeAnnotation {
     /// Do NOT use this to print lifetime annotations!
@@ -93,6 +99,11 @@ impl From<String> for LifetimeAnnotation {
         Self::from(value.as_str())
     }
 }
+impl From<LifetimeAnnotation> for String {
+    fn from(value: LifetimeAnnotation) -> Self {
+        value.to_string()
+    }
+}
 impl std::fmt::Display for LifetimeAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("'")?;
@@ -101,7 +112,7 @@ impl std::fmt::Display for LifetimeAnnotation {
 }
 
 /// Relationship between lifetime annotations
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LifetimeRelation {
     pub shorter: LifetimeAnnotation,
     pub longer: LifetimeAnnotation,
@@ -112,7 +123,7 @@ impl std::fmt::Display for LifetimeRelation {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ResolvedRegion {
     pub region: Region,
     pub name: Option<LifetimeAnnotation>,
@@ -129,7 +140,7 @@ impl std::fmt::Display for ResolvedRegion {
 
 /// Relationship between resolved region lifetimes
 /// This relations is appeared in source as `'longer: 'shorter`
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RequiredOutlive {
     pub longer: ResolvedRegion,
     pub shorter: ResolvedRegion,
@@ -152,7 +163,8 @@ impl std::fmt::Display for RequiredOutlive {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum UnfixableReason {
     UnnamedRegion(RequiredOutlive),
     DiagnosticsRemain,
@@ -168,7 +180,8 @@ impl std::fmt::Display for UnfixableReason {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum FunctionStatus {
     Unchanged,
     Fixed,
@@ -176,11 +189,79 @@ pub enum FunctionStatus {
     Skipped(Vec<SkipReason>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FunctionReport {
     pub def_path: String,
     pub status: FunctionStatus,
     pub where_added: Vec<LifetimeRelation>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CrateReport {
+    pub krate: String,
+    pub rounds: usize,
+    pub verified: bool,
+    pub functions: Vec<FunctionReport>,
+}
+impl CrateReport {
+    pub fn new(krate: String) -> Self {
+        Self {
+            krate,
+            rounds: 0,
+            verified: false,
+            functions: Vec::new(),
+        }
+    }
+
+    pub fn record_round(&mut self, functions: &[FunctionReport]) {
+        self.rounds += 1;
+        let mut known = self.take_functions();
+        for function in functions {
+            known
+                .entry(function.def_path.clone())
+                .and_modify(|known| {
+                    known.status = function.status.clone();
+                    known
+                        .where_added
+                        .extend(function.where_added.iter().cloned());
+                })
+                .or_insert_with(|| function.clone());
+        }
+        self.functions = known.into_values().collect();
+    }
+
+    pub fn conclude(&mut self, functions: Vec<FunctionReport>) {
+        let mut known = self.take_functions();
+        self.functions = functions
+            .into_iter()
+            .map(|function| {
+                let where_added = known
+                    .remove(&function.def_path)
+                    .map(|known| known.where_added)
+                    .unwrap_or_default();
+                let status = match function.status {
+                    FunctionStatus::Unchanged if !where_added.is_empty() => FunctionStatus::Fixed,
+                    status => status,
+                };
+                FunctionReport {
+                    def_path: function.def_path,
+                    status,
+                    where_added,
+                }
+            })
+            .collect();
+        self.verified = !self
+            .functions
+            .iter()
+            .any(|function| matches!(function.status, FunctionStatus::Unfixable(_)));
+    }
+
+    fn take_functions(&mut self) -> BTreeMap<String, FunctionReport> {
+        std::mem::take(&mut self.functions)
+            .into_iter()
+            .map(|function| (function.def_path.clone(), function))
+            .collect()
+    }
 }
 
 /// Position in signature to interact

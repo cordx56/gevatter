@@ -1,11 +1,21 @@
-pub const ENV_VAR_NAME: &str = "FIXER_PHASE";
-pub const MAX_FIX_ROUNDS: usize = 10;
+use std::env;
+use std::sync::LazyLock;
+
+pub const ENV_VAR_NAME: &str = "GEVATTER_PHASE";
+pub static MAX_FIX_ROUNDS: LazyLock<usize> = LazyLock::new(|| {
+    env::var("GEVATTER_MAX_FIX_ROUNDS")
+        .ok()
+        .map(|v| v.parse().ok())
+        .flatten()
+        .unwrap_or(10)
+});
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
     AnnotationFreshen,
     AnalyzeAndFix(usize),
     Verification,
+    Fallback,
 }
 impl Phase {
     pub fn from_str(s: &str) -> Option<Self> {
@@ -15,6 +25,7 @@ impl Phase {
                 "1" => Some(Phase::AnnotationFreshen),
                 "2" => Some(Phase::AnalyzeAndFix(0)),
                 "3" => Some(Phase::Verification),
+                "4" => Some(Phase::Fallback),
                 _ => None,
             },
             2 => match split[0] {
@@ -37,11 +48,14 @@ impl Phase {
             Phase::AnnotationFreshen => Some(Phase::AnalyzeAndFix(0)),
             Phase::AnalyzeAndFix(_) => Some(Phase::Verification),
             Phase::Verification => None,
+            Phase::Fallback => None,
         }
     }
+    /// This returns None if the current phase is not "analyze and fix",
+    /// or it exceeds max fix rounds
     pub fn next_round(&self) -> Option<Self> {
         match self {
-            Phase::AnalyzeAndFix(round) if round + 1 < MAX_FIX_ROUNDS => {
+            Phase::AnalyzeAndFix(round) if round + 1 < *MAX_FIX_ROUNDS => {
                 Some(Phase::AnalyzeAndFix(round + 1))
             }
             _ => None,
@@ -54,6 +68,7 @@ impl std::fmt::Display for Phase {
             Phase::AnnotationFreshen => f.write_str("1"),
             Phase::AnalyzeAndFix(sub) => f.write_str(&format!("2.{sub}")),
             Phase::Verification => f.write_str("3"),
+            Phase::Fallback => f.write_str("4"),
         }
     }
 }

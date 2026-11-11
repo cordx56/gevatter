@@ -10,5 +10,7 @@ rustc_private = true
 analyzer = { path = "../gevatter_analyzer", package = "gevatter_analyzer" }
 editor = { path = "../gevatter_editor", package = "gevatter_editor" }
 models = { path = "../gevatter_models", package = "gevatter_models" }
+bridge = { path = "../gevatter_rustc_bridge", package = "gevatter_rustc_bridge" }
 
+serde_json.workspace = true
 tracing.workspace = true
