@@ -142,18 +142,13 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
         };
 
         // avoid conflicting with existing names
-        let mut used = UsedNameChecker(Vec::new());
-        for item in imp.items {
-            used.visit_impl_item(tcx.hir_impl_item(*item));
-        }
-        let existing: Vec<_> = imp
-            .generics
-            .params
-            .iter()
-            .map(|param| param.name.ident().name.to_string())
-            .chain(used.0.into_iter())
-            .collect();
-        let mut used_checker = UsedNameChecker(existing);
+        let mut used_checker = UsedNameChecker(
+            imp.generics
+                .params
+                .iter()
+                .map(|param| param.name.ident().name.to_string())
+                .collect(),
+        );
         for item_id in imp.items {
             used_checker.visit_impl_item(tcx.hir_impl_item(*item_id))
         }
@@ -403,12 +398,11 @@ impl<'hir> Visitor<'hir> for Collector {
                 }
                 continue;
             }
-            self.visit_generic_args(args);
+            self.visit_generic_arg(arg);
         }
         for constraint in args.constraints {
             self.visit_assoc_item_constraint(constraint);
         }
-        intravisit::walk_generic_args(self, args)
     }
     fn visit_lifetime(&mut self, lifetime: &'hir hir::Lifetime) -> Self::Result {
         if matches!(
@@ -421,7 +415,6 @@ impl<'hir> Visitor<'hir> for Collector {
             let (span, replace) = lifetime.suggestion(&name.to_string());
             self.push_edit(span, replace);
         }
-        intravisit::walk_lifetime(self, lifetime)
     }
 }
 
@@ -437,7 +430,7 @@ impl<'hir> Visitor<'hir> for SkippedCollector<'_> {
         } else if lifetime.syntax != hir::LifetimeSyntax::ExplicitBound {
             reason.push(SkipReason::HigherRanked);
         } else {
-            return intravisit::walk_lifetime(self, lifetime);
+            return;
         }
         self.skipped.push(Skipped {
             start: self
@@ -450,6 +443,5 @@ impl<'hir> Visitor<'hir> for SkippedCollector<'_> {
                 .0 as usize,
             reason,
         });
-        intravisit::walk_lifetime(self, lifetime)
     }
 }

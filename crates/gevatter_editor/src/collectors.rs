@@ -94,7 +94,11 @@ pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
         let mut expansion_check = SignatureExpansionCheck::default();
         expansion_check.visit_fn_ret_ty(&signature.decl.output);
         let is_return_opaque = expansion_check.opaque;
-        expansion_check.visit_fn_decl(signature.decl);
+        signature
+            .decl
+            .inputs
+            .iter()
+            .for_each(|input| expansion_check.visit_ty_unambig(input));
         expansion_check.visit_generics(generics);
         if expansion_check.expanded
             || signature.span.from_expansion()
@@ -168,7 +172,6 @@ impl<'hir> Visitor<'hir> for SignatureExpansionCheck {
     }
     fn visit_ident(&mut self, ident: Ident) -> Self::Result {
         self.expanded |= ident.span.from_expansion();
-        intravisit::walk_ident(self, ident)
     }
     fn visit_generic_param(&mut self, param: &'hir GenericParam<'hir>) -> Self::Result {
         self.expanded |= param.span.from_expansion();

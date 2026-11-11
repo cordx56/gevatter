@@ -31,6 +31,7 @@ pub fn collect(tcx: TyCtxt<'_>) {
             used_lifetime: Vec::new(),
         };
         checker.visit_fn_decl(target.signature.decl);
+        let occurrences = std::mem::take(&mut checker.used_lifetime);
         checker.visit_generics(target.generics);
         let mut skip = !target.skipped.is_empty();
         if checker.forbidden {
@@ -70,15 +71,7 @@ pub fn collect(tcx: TyCtxt<'_>) {
                     .collect(),
                 ..Default::default()
             };
-            let mut occurrences = SafetyChecker {
-                has_param: checker.has_param,
-                protected: false,
-                forbidden: false,
-                used_lifetime: Default::default(),
-            };
-            occurrences.visit_fn_decl(target.signature.decl);
             before.slots = occurrences
-                .used_lifetime
                 .iter()
                 .map(|lifetime| models::Slot {
                     lifetime: models::LifetimeAnnotation::from(lifetime.ident.name.to_string()),
