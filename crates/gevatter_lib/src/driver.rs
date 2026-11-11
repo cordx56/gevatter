@@ -60,12 +60,13 @@ impl Callbacks for GevatterDriver {
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
+        tracing::info!(
+            "phase {}: {:?}",
+            self.current_phase.to_string(),
+            self.current_phase
+        );
         match self.current_phase {
             Phase::AnnotationFreshen => {
-                tracing::info!(
-                    "phase {}: annotation freshen",
-                    Phase::AnnotationFreshen as u8
-                );
                 // ensure temporary files are cleaned on phase 1
                 TemporaryFileLoader::ensure_temp_refresh();
                 let edits = editor::freshen::freshen_annotations(tcx);
@@ -79,8 +80,7 @@ impl Callbacks for GevatterDriver {
                 }
                 rustc_driver::Compilation::Stop
             }
-            Phase::AnalyzeAndFix => {
-                tracing::info!("phase {}: analyze and fix", Phase::AnalyzeAndFix as u8);
+            Phase::AnalyzeAndFix(_) => {
                 let outlive_reports = analyzer::report_outlives(tcx);
                 let locations = editor::predicates::collect_predicates_locations(tcx);
                 let round = editor::resolver::outlive_report_edits(&outlive_reports, &locations);
@@ -104,7 +104,6 @@ impl Callbacks for GevatterDriver {
                 rustc_driver::Compilation::Stop
             }
             Phase::Verification => {
-                tracing::info!("phase {}: verification", Phase::Verification as u8);
                 // TODO: verification phase!
                 rustc_driver::Compilation::Continue
             }
