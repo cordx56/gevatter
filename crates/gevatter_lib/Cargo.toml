@@ -7,7 +7,8 @@ edition.workspace = true
 rustc_private = true
 
 [dependencies]
+analyzer = { path = "../gevatter_analyzer", package = "gevatter_analyzer" }
+editor = { path = "../gevatter_editor", package = "gevatter_editor" }
 models = { path = "../gevatter_models", package = "gevatter_models" }
-cargo_metadata.workspace = true
+
 tracing.workspace = true
-thiserror.workspace = true

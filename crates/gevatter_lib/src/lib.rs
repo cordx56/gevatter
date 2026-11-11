@@ -17,8 +17,5 @@ pub use rustc_middle::{
 pub use rustc_session as session;
 pub use rustc_span::{self as span, Ident, Span};
 
-pub mod analyzers;
 pub mod driver;
-pub mod editors;
 pub mod fix;
-pub mod toolchain;

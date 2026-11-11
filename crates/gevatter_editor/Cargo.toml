@@ -1,0 +1,16 @@
+[package]
+name = "gevatter_editor"
+version.workspace = true
+edition.workspace = true
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+[dependencies]
+models = { path = "../gevatter_models", package = "gevatter_models" }
+analyzer = { path = "../gevatter_analyzer", package = "gevatter_analyzer" }
+
+cargo_metadata.workspace = true
+indexmap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,23 +1,20 @@
 use super::{naming::LifetimeNamer, *};
 use crate::{
-    Ident, Span, TyCtxt, editors,
+    BytePos, FileName, Span, TyCtxt,
     hir::{
-        self, AmbigArg, Block, GenericParam, GenericParamKind, ImplItemKind, ItemKind, Node,
-        TraitItemKind, Ty, TyKind,
-        def::DefKind,
+        self, AmbigArg, GenericParam, GenericParamKind, ItemKind, Node, Ty, TyKind,
         intravisit::{self, Visitor},
     },
-    middle,
-    span::{BytePos, FileName},
 };
 use models::SkipReason;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
+    let krate = tcx.crate_name(hir::def_id::LOCAL_CRATE).to_string();
     let impls = collect_impls(tcx);
     let mut functions = Vec::new();
-    for target in editors::collectors::collect_functions(tcx) {
+    for target in crate::collectors::collect_functions(tcx) {
         let mut bailed = target.skipped;
         if target.is_return_opaque {
             bailed.push(SkipReason::ImplTraitReturn);
@@ -49,6 +46,7 @@ pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
                         .flat_map(|imp| imp.introduced.iter().map(|l| l.to_string().to_owned())),
                 );
             let mut collector = Collector {
+                krate: krate.clone(),
                 source: target.source.clone(),
                 file: target.file.clone(),
                 name: LifetimeNamer::new(existing),
@@ -106,6 +104,7 @@ pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
 }
 
 pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
+    let krate = tcx.crate_name(hir::def_id::LOCAL_CRATE).to_string();
     let mut impls = HashMap::new();
     for owner in tcx.hir_crate_items(()).owners() {
         let Node::Item(item) = tcx.hir_node_by_def_id(owner.def_id) else {
@@ -159,6 +158,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             used_checker.visit_impl_item(tcx.hir_impl_item(*item_id))
         }
         let mut collector = Collector {
+            krate: krate.clone(),
             source: source.clone(),
             file: file.to_path_buf(),
             name: LifetimeNamer::new(used_checker.0.iter().cloned()),
@@ -270,7 +270,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
                 ..edit.clone()
             })
             .collect();
-        let Ok(replace_with) = editors::apply(&text[lo..hi], &relative) else {
+        let Ok(replace_with) = crate::apply(&text[lo..hi], &relative) else {
             tracing::warn!("editing impl {:?} failed; ignore", owner.def_id);
             continue;
         };
@@ -281,6 +281,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
                 def_path: collector.report.def_path,
                 introduced: collector.report.introduced,
                 edits: vec![Edit {
+                    krate: krate.clone(),
                     file: file.to_path_buf(),
                     span: models::Span { lo, hi },
                     replace_with,
@@ -312,6 +313,7 @@ fn is_target(lifetime: &hir::Lifetime) -> bool {
     )
 }
 struct Collector {
+    krate: String,
     file: PathBuf,
     source: Arc<SourceFile>,
     name: naming::LifetimeNamer,
@@ -322,6 +324,7 @@ impl Collector {
     fn push_edit(&mut self, span: Span, replace_with: String) {
         let span = models::Span::new(&self.source, span);
         self.report.edits.push(Edit {
+            krate: self.krate.clone(),
             file: self.file.clone(),
             span,
             replace_with,

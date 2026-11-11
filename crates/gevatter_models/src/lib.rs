@@ -27,9 +27,15 @@ impl From<ty::RegionVid> for Region {
         Self(value.as_u32())
     }
 }
+impl std::fmt::Display for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("'?")?;
+        f.write_str(&self.0.to_string())
+    }
+}
 impl std::fmt::Debug for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Region('{})", self.0))
+        f.write_str(&format!("Region({})", self.to_string()))
     }
 }
 
@@ -96,12 +102,12 @@ impl LifetimeAnnotation {
 }
 impl From<&str> for LifetimeAnnotation {
     fn from(value: &str) -> Self {
-        Self(value.to_string())
+        Self(value.strip_prefix("'").unwrap_or(value).to_string())
     }
 }
 impl From<String> for LifetimeAnnotation {
     fn from(value: String) -> Self {
-        Self(value)
+        Self::from(value.as_str())
     }
 }
 impl std::fmt::Display for LifetimeAnnotation {

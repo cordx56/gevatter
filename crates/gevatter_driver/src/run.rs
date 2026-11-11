@@ -17,5 +17,5 @@ pub fn run_compiler() -> ExitCode {
         }
     }
 
-    driver::run(&args, &mut driver::FixerRustc::new(&original_args))
+    driver::run(&args, &mut driver::GevatterDriver::new(&original_args))
 }

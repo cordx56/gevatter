@@ -1,11 +1,18 @@
-use crate::{
-    hir::{FnSig, Generics, def_id::LocalDefId},
-    span::{
-        Ident, SourceFile,
-        source_map::{FileLoader, RealFileLoader},
-    },
+#![feature(rustc_private)]
+
+extern crate rustc_hir;
+extern crate rustc_middle;
+extern crate rustc_span;
+
+use rustc_hir::{self as hir, FnSig, Generics, def_id::LocalDefId};
+use rustc_middle::{self as middle, ty::TyCtxt};
+use rustc_span::{
+    BytePos, FileName, Ident, SourceFile, Span,
+    source_map::{FileLoader, RealFileLoader},
 };
+
 use std::collections::BTreeMap;
+use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -13,6 +20,8 @@ use std::sync::Arc;
 
 pub mod collectors;
 pub mod freshen;
+pub mod predicates;
+pub mod resolver;
 pub mod simplify;
 pub mod strip;
 
@@ -20,6 +29,7 @@ pub mod strip;
 /// Replace range of `span` with `replace_with`
 #[derive(Clone, Debug)]
 pub struct Edit {
+    pub krate: String,
     pub file: PathBuf,
     pub span: models::Span,
     pub replace_with: String,
@@ -45,6 +55,7 @@ pub struct Skipped {
 /// Information about a function that will be modified,
 /// or once checked, but decided to be skipped.
 pub struct TargetFunc<'tcx> {
+    pub krate: String,
     pub file: PathBuf,
     pub source: Arc<SourceFile>,
     pub def_id: LocalDefId,
@@ -95,11 +106,13 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
     for edit in edits {
         grouped
             .entry(&edit.file)
-            .or_insert_with(Vec::new)
+            .or_insert((edit.krate.clone(), Vec::new()))
+            .1
             .push(edit.clone());
     }
-    for (path, edits) in grouped {
-        let source = match TemporaryFileLoader.read_file(path) {
+    for (path, (krate, edits)) in grouped {
+        let file_loader = TemporaryFileLoader::new(Some(krate));
+        let source = match file_loader.read_file(path) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to read file {path:?}: {e:?}");
@@ -113,17 +126,35 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
                 return Ok(());
             }
         };
-        TemporaryFileLoader.write_file(path, edited.as_bytes())?;
+        file_loader.write_file(path, edited.as_bytes())?;
     }
     Ok(())
 }
 
+pub fn target_dir() -> PathBuf {
+    use cargo_metadata::MetadataCommand;
+
+    if let Ok(v) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(v)
+    } else if let Ok(meta) = MetadataCommand::new().exec() {
+        meta.target_directory.as_std_path().to_path_buf()
+    } else {
+        tracing::warn!("failed to read target directory; fallback to ./target");
+        PathBuf::from("./target")
+    }
+    .join("gevatter")
+}
 pub fn edit_out_dir() -> PathBuf {
-    crate::toolchain::target_dir().join("source")
+    target_dir().join("source")
 }
 
-pub struct TemporaryFileLoader;
+pub struct TemporaryFileLoader {
+    krate: Option<String>,
+}
 impl TemporaryFileLoader {
+    pub fn new(krate: Option<String>) -> Self {
+        Self { krate }
+    }
     fn ensure_temp_path(&self, path: &Path) -> io::Result<PathBuf> {
         let out_dir = edit_out_dir();
         let relative = if path.is_absolute() {
@@ -131,7 +162,12 @@ impl TemporaryFileLoader {
         } else {
             path
         };
-        let temp_path = out_dir.join(relative);
+        let temp_path = if let Some(krate) = &self.krate {
+            out_dir.join(krate)
+        } else {
+            out_dir
+        }
+        .join(relative);
         if !temp_path.is_file() {
             let parent = temp_path.parent().expect("invalid file path");
             if let Err(e) = fs::create_dir_all(parent) {
@@ -144,6 +180,11 @@ impl TemporaryFileLoader {
             }
         }
         Ok(temp_path)
+    }
+    pub fn ensure_temp_refresh() -> PathBuf {
+        let out_dir = edit_out_dir();
+        let _ = fs::remove_dir_all(&out_dir);
+        out_dir
     }
     pub fn write_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
         let temp_path = self.ensure_temp_path(path)?;

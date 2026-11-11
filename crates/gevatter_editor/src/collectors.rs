@@ -1,14 +1,14 @@
 use super::TargetFunc;
 use crate::{
-    Ident, TyCtxt,
+    FileName, Ident, TyCtxt,
     hir::{
         self, AmbigArg, Block, GenericParam, GenericParamKind, ImplItemKind, ItemKind, Node,
         TraitItemKind, Ty, TyKind,
         def::DefKind,
+        def_id::LOCAL_CRATE,
         intravisit::{self, Visitor},
     },
     middle,
-    span::FileName,
 };
 use models::SkipReason;
 use std::path::PathBuf;
@@ -136,7 +136,9 @@ pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
             "register {def_path} as a target; note: skip: {}",
             !skipped.is_empty()
         );
+        let krate = tcx.crate_name(LOCAL_CRATE).to_string();
         target_funcs.push(TargetFunc {
+            krate,
             file: file.unwrap_or_default(),
             source,
             def_id,

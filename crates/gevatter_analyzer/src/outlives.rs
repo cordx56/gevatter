@@ -1,4 +1,4 @@
-use models::Region;
+use models::{LifetimeRelation, Region};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Compute reachability of edges
@@ -56,4 +56,12 @@ pub fn compute_outlive_relations(
                 .collect::<Vec<_>>()
         })
         .collect()
+}
+
+pub struct OutliveRelationReport {
+    pub def_path: String,
+    pub krate: String,
+    pub had_diagnostics: bool,
+    pub required: OutliveRelations,
+    pub named_required: Vec<LifetimeRelation>,
 }
