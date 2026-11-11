@@ -51,9 +51,7 @@ impl Callbacks for GevatterDriver {
                 value.as_deref().map(rustc_span::Symbol::intern),
             ));
         }));
-        config.file_loader = Some(Box::new(TemporaryFileLoader::new(
-            config.opts.crate_name.clone(),
-        )));
+        config.file_loader = Some(Box::new(TemporaryFileLoader));
     }
 
     fn after_expansion<'tcx>(
@@ -87,6 +85,7 @@ impl Callbacks for GevatterDriver {
                 let predicates_to_insert = editor::predicates::collect_predicates_locations(tcx);
                 let edits =
                     editor::resolver::outlive_report_edits(&outlive_reports, &predicates_to_insert);
+                tracing::info!("{} edits to apply", edits.len());
                 if let Err(_) = editor::apply_to_file(&edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {

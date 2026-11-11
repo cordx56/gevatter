@@ -14,9 +14,9 @@ use rustc_span::{
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 pub mod collectors;
 pub mod freshen;
@@ -106,13 +106,18 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
     for edit in edits {
         grouped
             .entry(&edit.file)
-            .or_insert((edit.krate.clone(), Vec::new()))
-            .1
+            .or_insert_with(Vec::new)
             .push(edit.clone());
     }
-    for (path, (krate, edits)) in grouped {
-        let file_loader = TemporaryFileLoader::new(Some(krate));
-        let source = match file_loader.read_file(path) {
+    for (path, edits) in grouped {
+        if matches!(mirror_of(path), Ok(None)) {
+            tracing::warn!(
+                "{path:?} is outside the workspace or a build product; {} edits dropped",
+                edits.len()
+            );
+            continue;
+        }
+        let source = match TemporaryFileLoader.read_file(path) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("failed to read file {path:?}: {e:?}");
@@ -126,84 +131,86 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
                 return Ok(());
             }
         };
-        file_loader.write_file(path, edited.as_bytes())?;
+        TemporaryFileLoader.write_file(path, edited.as_bytes())?;
     }
     Ok(())
 }
 
-pub fn target_dir() -> PathBuf {
-    use cargo_metadata::MetadataCommand;
-
-    if let Ok(v) = env::var("CARGO_TARGET_DIR") {
-        PathBuf::from(v)
-    } else if let Ok(meta) = MetadataCommand::new().exec() {
-        meta.target_directory.as_std_path().to_path_buf()
+pub static CARGO_METADATA: LazyLock<Option<cargo_metadata::Metadata>> =
+    LazyLock::new(|| cargo_metadata::MetadataCommand::new().exec().ok());
+pub static WORKSPACE_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Some(path) = CARGO_METADATA
+        .as_ref()
+        .map(|v| fs::canonicalize(v.workspace_root.as_std_path().to_path_buf()).ok())
+        .flatten()
+    {
+        path
+    } else {
+        env::current_dir().unwrap()
+    }
+});
+pub static TARGET_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Some(v) = env::var("CARGO_TARGET_DIR")
+        .ok()
+        .map(|v| fs::canonicalize(v).ok())
+        .flatten()
+    {
+        v
+    } else if let Some(path) = CARGO_METADATA
+        .as_ref()
+        .map(|v| fs::canonicalize(v.target_directory.as_std_path().to_path_buf()).ok())
+        .flatten()
+    {
+        path
     } else {
         tracing::warn!("failed to read target directory; fallback to ./target");
-        PathBuf::from("./target")
+        WORKSPACE_ROOT.join("target")
     }
-    .join("gevatter")
+});
+
+fn edit_out_dir() -> PathBuf {
+    TARGET_DIR.join("gevatter").join("source")
 }
-pub fn edit_out_dir() -> PathBuf {
-    target_dir().join("source")
+fn mirror_of(path: &Path) -> io::Result<Option<(PathBuf, PathBuf)>> {
+    let original = fs::canonicalize(path)?;
+    if original.starts_with(&*TARGET_DIR) {
+        return Ok(None);
+    }
+    Ok(original
+        .strip_prefix(&*WORKSPACE_ROOT)
+        .ok()
+        .map(|rel| (original.clone(), edit_out_dir().join(rel))))
+}
+fn ensure_mirror(path: &Path) -> io::Result<Option<PathBuf>> {
+    let Some((original, mirror)) = mirror_of(path)? else {
+        return Ok(None);
+    };
+    if !mirror.is_file() {
+        let parent = mirror.parent().expect("a mirror lies below the out dir");
+        fs::create_dir_all(parent)
+            .inspect_err(|e| tracing::error!("failed to create out dir {parent:?}: {e:?}"))?;
+        fs::copy(&original, &mirror)
+            .inspect_err(|e| tracing::error!("failed to copy {original:?} to {mirror:?}: {e:?}"))?;
+    }
+    Ok(Some(mirror))
 }
 
-pub struct TemporaryFileLoader {
-    krate: Option<String>,
-}
+pub struct TemporaryFileLoader;
 impl TemporaryFileLoader {
-    pub fn new(krate: Option<String>) -> Self {
-        Self { krate }
-    }
-    fn ensure_temp_path(&self, path: &Path) -> io::Result<PathBuf> {
-        let out_dir = edit_out_dir();
-        let relative = if path.is_absolute() {
-            path.trim_prefix(self.current_directory()?)
-        } else {
-            path
-        };
-        let temp_path = if let Some(krate) = &self.krate {
-            out_dir.join(krate)
-        } else {
-            out_dir
-        }
-        .join(relative);
-        if !temp_path.is_file() {
-            let parent = temp_path.parent().expect("invalid file path");
-            if let Err(e) = fs::create_dir_all(parent) {
-                tracing::error!("failed to create out dir {parent:?}: {e:?}");
-                return Err(e);
-            }
-            if let Err(e) = fs::copy(&relative, &temp_path) {
-                tracing::error!("failed to copy source file to dest: {e:?}");
-                return Err(e);
-            }
-        }
-        Ok(temp_path)
-    }
     pub fn ensure_temp_refresh() -> PathBuf {
         let out_dir = edit_out_dir();
         let _ = fs::remove_dir_all(&out_dir);
         out_dir
     }
     pub fn write_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
-        let temp_path = self.ensure_temp_path(path)?;
-        let mut file = match fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(temp_path)
-        {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("failed to open file {path:?}: {e:?}");
-                return Err(e);
-            }
-        };
-        if let Err(e) = file.write_all(bytes) {
-            tracing::error!("failed to write file {path:?}: {e:?}");
-            return Err(e);
-        }
-        Ok(())
+        let mirror = ensure_mirror(path)?.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{path:?} is outside the workspace or a build product"),
+            )
+        })?;
+        fs::write(&mirror, bytes)
+            .inspect_err(|e| tracing::error!("failed to write file {mirror:?}: {e:?}"))
     }
 }
 impl FileLoader for TemporaryFileLoader {
@@ -211,8 +218,10 @@ impl FileLoader for TemporaryFileLoader {
         RealFileLoader.file_exists(path)
     }
     fn read_file(&self, path: &Path) -> io::Result<String> {
-        let temp_path = self.ensure_temp_path(path)?;
-        fs::read_to_string(&temp_path)
+        match ensure_mirror(path)? {
+            Some(mirror) => RealFileLoader.read_file(&mirror),
+            None => RealFileLoader.read_file(path),
+        }
     }
     fn read_binary_file(&self, path: &Path) -> io::Result<Arc<[u8]>> {
         RealFileLoader.read_binary_file(path)

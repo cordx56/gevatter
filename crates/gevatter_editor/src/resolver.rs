@@ -27,7 +27,7 @@ pub fn outlive_report_edits(
         let predicates: Vec<_> = report
             .named_required
             .iter()
-            .map(|rel| format!("{}: {}", rel.sub.to_string(), rel.sup.to_string()))
+            .map(|rel| format!("{}: {}", rel.longer.to_string(), rel.shorter.to_string()))
             .collect();
         insert.replace_with.push_str(&predicates.join(", "));
         inserts.push(insert);

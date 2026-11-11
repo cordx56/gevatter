@@ -265,7 +265,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             .map(|edit| Edit {
                 span: models::Span {
                     lo: edit.span.lo - lo,
-                    hi: edit.span.hi - hi,
+                    hi: edit.span.hi - lo,
                 },
                 ..edit.clone()
             })

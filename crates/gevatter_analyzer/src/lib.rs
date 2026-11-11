@@ -91,8 +91,8 @@ pub fn report_outlives(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, OutliveRelationR
             .filter_map(
                 |(sub, sup)| match (names.annotation(sub), names.annotation(sup)) {
                     (Some(sub), Some(sup)) => Some(models::LifetimeRelation {
-                        sup: sup.clone(),
-                        sub: sub.clone(),
+                        shorter: sup.clone(),
+                        longer: sub.clone(),
                     }),
                     _ => None,
                 },

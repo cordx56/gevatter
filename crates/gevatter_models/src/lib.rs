@@ -120,8 +120,8 @@ impl std::fmt::Display for LifetimeAnnotation {
 /// Relationship between lifetime annotations
 #[derive(Clone, Debug)]
 pub struct LifetimeRelation {
-    pub sup: LifetimeAnnotation,
-    pub sub: LifetimeAnnotation,
+    pub shorter: LifetimeAnnotation,
+    pub longer: LifetimeAnnotation,
 }
 
 /// Position in signature to interact
