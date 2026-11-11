@@ -156,12 +156,14 @@ impl std::fmt::Display for RequiredOutlive {
 pub enum UnfixableReason {
     UnnamedRegion(RequiredOutlive),
     DiagnosticsRemain,
+    NoFixpoint,
 }
 impl std::fmt::Display for UnfixableReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnnamedRegion(required) => write!(f, "`{required}` has an unnamed region"),
             Self::DiagnosticsRemain => f.write_str("diagnostics remain"),
+            Self::NoFixpoint => f.write_str("no fixpoint"),
         }
     }
 }

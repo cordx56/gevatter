@@ -127,7 +127,7 @@ pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
             Ok(v) => v,
             Err(e) => {
                 tracing::warn!("failed to edit file {path:?}: {e:?}");
-                return Ok(());
+                return Err(io::Error::other(e));
             }
         };
         TemporaryFileLoader.write_file(path, edited.as_bytes())?;

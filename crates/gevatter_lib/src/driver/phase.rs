@@ -1,4 +1,5 @@
 pub const ENV_VAR_NAME: &str = "FIXER_PHASE";
+pub const MAX_FIX_ROUNDS: usize = 10;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
@@ -36,6 +37,14 @@ impl Phase {
             Phase::AnnotationFreshen => Some(Phase::AnalyzeAndFix(0)),
             Phase::AnalyzeAndFix(_) => Some(Phase::Verification),
             Phase::Verification => None,
+        }
+    }
+    pub fn next_round(&self) -> Option<Self> {
+        match self {
+            Phase::AnalyzeAndFix(round) if round + 1 < MAX_FIX_ROUNDS => {
+                Some(Phase::AnalyzeAndFix(round + 1))
+            }
+            _ => None,
         }
     }
 }

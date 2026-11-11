@@ -9,6 +9,17 @@ pub struct FixRound {
     pub edits: Vec<crate::Edit>,
     pub functions: Vec<FunctionReport>,
 }
+impl FixRound {
+    pub fn without_fixpoint(mut self) -> Self {
+        self.functions
+            .iter_mut()
+            .filter(|function| matches!(function.status, FunctionStatus::Fixed))
+            .for_each(|function| {
+                function.status = FunctionStatus::Unfixable(UnfixableReason::NoFixpoint)
+            });
+        self
+    }
+}
 
 pub fn outlive_report_edits(
     reports: &IndexMap<LocalDefId, OutliveRelationReport>,

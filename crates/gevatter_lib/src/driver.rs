@@ -84,6 +84,16 @@ impl Callbacks for GevatterDriver {
                 let outlive_reports = analyzer::report_outlives(tcx);
                 let locations = editor::predicates::collect_predicates_locations(tcx);
                 let round = editor::resolver::outlive_report_edits(&outlive_reports, &locations);
+                let next_round = self
+                    .current_phase
+                    .next_round()
+                    .filter(|_| !round.edits.is_empty());
+                let round = if next_round.is_none() && !round.edits.is_empty() {
+                    tracing::warn!("no fixpoint after {} rounds", phase::MAX_FIX_ROUNDS);
+                    round.without_fixpoint()
+                } else {
+                    round
+                };
                 for function in &round.functions {
                     match &function.status {
                         FunctionStatus::Unfixable(reason) => {
@@ -92,13 +102,17 @@ impl Callbacks for GevatterDriver {
                         status => tracing::debug!("{}: {status:?}", function.def_path),
                     }
                 }
-                if let Err(_) = editor::apply_to_file(&round.edits) {
+                let next_phase = if let Err(_) = editor::apply_to_file(&round.edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
+                    None
                 } else {
                     tracing::info!("edits applied; re-exec for next phase");
+                    next_round
                 }
+                .or_else(|| self.current_phase.next_phase())
+                .unwrap();
 
-                if let Err(e) = self.re_exec(self.current_phase.next_phase().unwrap()) {
+                if let Err(e) = self.re_exec(next_phase) {
                     tracing::error!("process exec error: {e:?}");
                 }
                 rustc_driver::Compilation::Stop
