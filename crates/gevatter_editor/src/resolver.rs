@@ -1,8 +1,11 @@
-use crate::LocalDefId;
 use crate::predicates::{PredicateLocation, WhereInsertion};
 use analyzer::OutliveRelationReport;
+use bridge::hir::def_id::LocalDefId;
 use indexmap::IndexMap;
-use models::{FunctionReport, FunctionStatus, LifetimeRelation, RequiredOutlive, UnfixableReason};
+use models::{
+    BindingChange, FunctionReport, FunctionStatus, LifetimeRelation, RequiredOutlive, SkipReason,
+    UnfixableReason,
+};
 
 #[derive(Clone, Debug)]
 pub struct FixRound {
@@ -52,6 +55,7 @@ pub fn outlive_report_edits(
             def_path: report.def_path.clone(),
             status,
             where_added,
+            binding_change: BindingChange::default(),
         });
     }
     FixRound { edits, functions }
@@ -94,13 +98,22 @@ fn where_edit(insertion: &WhereInsertion, relations: &[LifetimeRelation]) -> cra
 pub fn verify_reports(
     reports: &IndexMap<LocalDefId, OutliveRelationReport>,
     locations: &IndexMap<LocalDefId, PredicateLocation>,
+    bindings: &IndexMap<LocalDefId, BindingChange>,
 ) -> Vec<FunctionReport> {
     reports
         .iter()
         .map(|(def_id, report)| {
             let location = locations.get(def_id);
-            let status = if let Some(unnamed) = report.required.iter().find(|r| r.named().is_none())
-            {
+            let preserved = matches!(
+                location,
+                Some(PredicateLocation::Skipped(reasons))
+                    if reasons.contains(&SkipReason::PreserveBinding)
+            );
+            let status = if preserved && !report.required.is_empty() {
+                FunctionStatus::Unfixable(UnfixableReason::WouldChangeBinding(
+                    report.required.clone(),
+                ))
+            } else if let Some(unnamed) = report.required.iter().find(|r| r.named().is_none()) {
                 FunctionStatus::Unfixable(UnfixableReason::UnnamedRegion(unnamed.clone()))
             } else if !report.required.is_empty()
                 && matches!(location, Some(PredicateLocation::Insertable(_)))
@@ -120,6 +133,10 @@ pub fn verify_reports(
                 def_path: report.def_path.clone(),
                 status,
                 where_added: Vec::new(),
+                binding_change: bindings
+                    .get(def_id)
+                    .cloned()
+                    .unwrap_or(BindingChange::Incomparable),
             }
         })
         .collect()

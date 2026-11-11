@@ -102,6 +102,8 @@ dependencies = [
  "gevatter_editor",
  "gevatter_models",
  "gevatter_rustc_bridge",
+ "indexmap",
+ "serde",
  "serde_json",
  "tracing",
 ]

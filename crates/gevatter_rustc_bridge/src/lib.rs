@@ -1,6 +1,7 @@
 #![feature(rustc_private)]
 
 pub extern crate rustc_borrowck;
+pub extern crate rustc_driver;
 pub extern crate rustc_hir;
 pub extern crate rustc_interface;
 pub extern crate rustc_middle;
@@ -9,6 +10,7 @@ pub extern crate rustc_span;
 
 pub use middle::ty::TyCtxt;
 pub use rustc_borrowck::consumers as borrowck;
+pub use rustc_driver as driver;
 pub use rustc_hir as hir;
 pub use rustc_interface as interface;
 pub use rustc_middle as middle;
@@ -44,5 +46,14 @@ impl FromRustc<hir::LifetimeSource> for models::SlotSyntax {
             hir::LifetimeSource::Reference => Self::Reference,
             _ => Self::Path,
         }
+    }
+}
+
+impl FromRustc<(TyCtxt<'_>, hir::def_id::LocalDefId)> for models::FunctionKey {
+    fn from_rustc((tcx, def_id): (TyCtxt<'_>, hir::def_id::LocalDefId)) -> Self {
+        Self::from(
+            tcx.def_path(def_id.to_def_id())
+                .to_string_no_crate_verbose(),
+        )
     }
 }

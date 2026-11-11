@@ -1,8 +1,4 @@
-use bridge::{
-    TyCtxt,
-    hir::def_id::LOCAL_CRATE,
-    span::source_map::{FileLoader, RealFileLoader},
-};
+use bridge::span::source_map::{FileLoader, RealFileLoader};
 
 use std::env;
 use std::fs;
@@ -58,6 +54,9 @@ pub fn edit_out_dir() -> PathBuf {
 pub fn report_path() -> PathBuf {
     unit_out_dir().join("report.json")
 }
+pub fn binding_path() -> PathBuf {
+    unit_out_dir().join("binding.json")
+}
 pub fn mirror_of(path: &Path) -> io::Result<Option<(PathBuf, PathBuf)>> {
     let original = fs::canonicalize(path)?;
     if original.starts_with(&*TARGET_DIR) {
@@ -96,6 +95,11 @@ impl TemporaryFileLoader {
     }
     pub fn ensure_temp_refresh() -> PathBuf {
         let out_dir = unit_out_dir();
+        let _ = fs::remove_dir_all(&out_dir);
+        out_dir
+    }
+    pub fn ensure_source_refresh() -> PathBuf {
+        let out_dir = edit_out_dir();
         let _ = fs::remove_dir_all(&out_dir);
         out_dir
     }

@@ -1,5 +1,7 @@
 use super::*;
-use crate::TyCtxt;
+use bridge::TyCtxt;
+use models::FunctionKey;
+use std::collections::BTreeSet;
 
 pub mod collector;
 pub mod naming;
@@ -20,8 +22,8 @@ pub struct ImplFreshen {
     pub steps: Vec<models::Step>,
 }
 
-pub fn freshen_annotations(tcx: TyCtxt<'_>) -> Vec<Edit> {
-    let (funcs, impls) = collector::collect(tcx);
+pub fn freshen_annotations(tcx: TyCtxt<'_>, preserved: &BTreeSet<FunctionKey>) -> Vec<Edit> {
+    let (funcs, impls) = collector::collect(tcx, preserved);
     let edits: Vec<_> = funcs
         .into_iter()
         .filter_map(|v| v.bailed.is_empty().then_some(v.edits.into_iter()))

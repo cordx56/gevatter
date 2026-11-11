@@ -3,12 +3,13 @@ use models::FunctionStatus;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
+use crate::binding::{self, BindingFile, BindingState};
 use crate::report::ReportFile;
-use crate::rustc_driver::Callbacks;
-use crate::rustc_interface::interface;
-use bridge::{TyCtxt, hir::def_id::LOCAL_CRATE};
-
-pub use rustc_driver::{catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
+use bridge::TyCtxt;
+use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
+use bridge::hir::def_id::LOCAL_CRATE;
+use bridge::interface::interface;
+use bridge::span;
 
 pub mod phase;
 
@@ -21,7 +22,6 @@ pub fn run(args: &[String], callbacks: &mut (dyn Callbacks + Send)) -> ExitCode 
 }
 
 pub struct DefaultRustc;
-
 impl Callbacks for DefaultRustc {}
 
 pub struct GevatterDriver {
@@ -31,7 +31,7 @@ pub struct GevatterDriver {
 }
 impl GevatterDriver {
     pub fn new(args: &[String]) -> Self {
-        let current_phase = Phase::current_phase().unwrap_or(Phase::AnnotationFreshen);
+        let current_phase = Phase::current_phase().unwrap_or(Phase::AnnotationFreshen(0));
         Self {
             args: args.to_vec(),
             current_phase,
@@ -66,17 +66,24 @@ impl Callbacks for GevatterDriver {
         config.track_state = Some(Box::new(|sess| {
             let value = std::env::var(phase::ENV_VAR_NAME).ok();
             sess.env_depinfo.lock().insert((
-                rustc_span::Symbol::intern(phase::ENV_VAR_NAME),
-                value.as_deref().map(rustc_span::Symbol::intern),
+                span::Symbol::intern(phase::ENV_VAR_NAME),
+                value.as_deref().map(span::Symbol::intern),
             ));
         }));
 
         // don't forget initializing unit path;
         // this is used for storing all artifacts
         TemporaryFileLoader::ensure_unit_path(&config);
-        if self.current_phase == Phase::AnnotationFreshen {
-            let path = TemporaryFileLoader::ensure_temp_refresh();
-            tracing::info!("this is first phase; temp directory ({path:?}) is cleaned");
+        match self.current_phase {
+            Phase::AnnotationFreshen(0) => {
+                let path = TemporaryFileLoader::ensure_temp_refresh();
+                tracing::info!("this is first phase; temp directory ({path:?}) is cleaned");
+            }
+            Phase::AnnotationFreshen(_) => {
+                let path = TemporaryFileLoader::ensure_source_refresh();
+                tracing::info!("this is a restart; source directory ({path:?}) is cleaned");
+            }
+            _ => {}
         }
 
         if self.current_phase != Phase::Fallback {
@@ -88,32 +95,43 @@ impl Callbacks for GevatterDriver {
         &mut self,
         _compiler: &interface::Compiler,
         tcx: TyCtxt<'tcx>,
-    ) -> rustc_driver::Compilation {
+    ) -> bridge::driver::Compilation {
         let krate = tcx.crate_name(LOCAL_CRATE);
         tracing::info!(
             "phase {} ({:?}) for crate {krate}",
-            self.current_phase.to_string(),
-            self.current_phase
+            self.current_phase,
+            self.current_phase,
         );
 
         match self.current_phase {
-            Phase::AnnotationFreshen => {
-                let edits = editor::freshen::freshen_annotations(tcx);
+            Phase::AnnotationFreshen(attempt) => {
+                let bindings = BindingFile::current();
+                let state = match attempt {
+                    0 => BindingState::default(),
+                    _ => bindings.load(),
+                }
+                .start_attempt(tcx, attempt);
+                bindings.store(&state);
+                let edits = editor::freshen::freshen_annotations(tcx, &state.preserved);
                 if let Err(_) = editor::apply_to_file(&edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
                     tracing::info!("edits applied; re-exec for next phase");
                 }
+
                 let file = ReportFile::of(tcx);
                 file.store(&file.empty());
+
                 if let Err(e) = self.re_exec(self.current_phase.next_phase().unwrap()) {
                     tracing::error!("process exec error: {e:?}");
                 }
-                rustc_driver::Compilation::Stop
+                bridge::driver::Compilation::Stop
             }
             Phase::AnalyzeAndFix(_) => {
                 let outlive_reports = analyzer::report_outlives(tcx);
-                let locations = editor::predicates::collect_predicates_locations(tcx);
+                let state = BindingFile::current().load();
+                let locations =
+                    editor::predicates::collect_predicates_locations(tcx, &state.preserved);
                 let round = editor::resolver::outlive_report_edits(&outlive_reports, &locations);
                 let next_round = self
                     .current_phase
@@ -152,34 +170,59 @@ impl Callbacks for GevatterDriver {
                 if let Err(e) = self.re_exec(next_phase) {
                     tracing::error!("process exec error: {e:?}");
                 }
-                rustc_driver::Compilation::Stop
+                bridge::driver::Compilation::Stop
             }
             Phase::Verification => {
                 let outlive_reports = analyzer::report_outlives(tcx);
-                let locations = editor::predicates::collect_predicates_locations(tcx);
+                let bindings = BindingFile::current();
+                let mut state = bindings.load();
+                let locations =
+                    editor::predicates::collect_predicates_locations(tcx, &state.preserved);
+                let changes = state.changes(tcx);
                 let file = ReportFile::of(tcx);
                 let mut report = file.load();
                 report.conclude(editor::resolver::verify_reports(
                     &outlive_reports,
                     &locations,
+                    &changes,
                 ));
                 file.store(&report);
                 for function in &report.functions {
                     if let FunctionStatus::Unfixable(reason) = &function.status {
                         tracing::warn!("{} is unfixable: {reason}", function.def_path);
                     }
+                    if function.binding_change.is_changed() {
+                        tracing::info!(
+                            "binding of {} changed: {:?}",
+                            function.def_path,
+                            function.binding_change,
+                        );
+                    }
+                }
+                let unpreserved = state.unpreserved(tcx, &changes);
+                if *binding::PRESERVE_BINDING && !unpreserved.is_empty() {
+                    tracing::info!(
+                        "{} functions changed binding; restart with their originals",
+                        unpreserved.len(),
+                    );
+                    state.preserved.extend(unpreserved);
+                    bindings.store(&state);
+                    if let Err(e) = self.re_exec(Phase::AnnotationFreshen(state.attempt + 1)) {
+                        tracing::error!("process exec error: {e:?}");
+                    }
+                    return bridge::driver::Compilation::Stop;
                 }
                 if report.verified {
                     self.verified = Some(file);
-                    return rustc_driver::Compilation::Continue;
+                    return bridge::driver::Compilation::Continue;
                 }
                 tracing::warn!("verification failed; fall back to the original");
                 if let Err(e) = self.re_exec(Phase::Fallback) {
                     tracing::error!("process exec error: {e:?}");
                 }
-                rustc_driver::Compilation::Stop
+                bridge::driver::Compilation::Stop
             }
-            Phase::Fallback => rustc_driver::Compilation::Continue,
+            Phase::Fallback => bridge::driver::Compilation::Continue,
         }
     }
 }

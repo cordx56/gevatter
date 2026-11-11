@@ -1,21 +1,23 @@
 use super::{naming::LifetimeNamer, *};
-use crate::{
-    BytePos, FileName, Span, TyCtxt,
-    hir::{
-        self, AmbigArg, GenericParam, GenericParamKind, ItemKind, Node, Ty, TyKind,
-        intravisit::{self, Visitor},
-    },
-};
 use bridge::FromRustc;
-use models::SkipReason;
-use std::collections::HashMap;
+use bridge::TyCtxt;
+use bridge::hir::{
+    self, AmbigArg, GenericParam, GenericParamKind, ItemKind, Node, Ty, TyKind,
+    intravisit::{self, Visitor},
+};
+use bridge::span::{BytePos, FileName, Span};
+use models::{FunctionKey, SkipReason};
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
-pub fn collect(tcx: TyCtxt<'_>) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
+pub fn collect(
+    tcx: TyCtxt<'_>,
+    preserved: &BTreeSet<FunctionKey>,
+) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
     let krate = tcx.crate_name(hir::def_id::LOCAL_CRATE).to_string();
     let impls = collect_impls(tcx);
     let mut functions = Vec::new();
-    for target in crate::collectors::collect_functions(tcx) {
+    for target in crate::collectors::collect_functions(tcx, preserved) {
         let mut bailed = target.skipped;
         if target.is_return_opaque {
             bailed.push(SkipReason::ImplTraitReturn);

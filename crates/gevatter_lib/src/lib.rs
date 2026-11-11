@@ -1,22 +1,15 @@
 #![feature(rustc_private)]
 
-pub extern crate rustc_borrowck;
-pub extern crate rustc_driver;
-pub extern crate rustc_hir;
-pub extern crate rustc_interface;
-pub extern crate rustc_middle;
-pub extern crate rustc_session;
-pub extern crate rustc_span;
-
-pub use rustc_borrowck::consumers as borrowck;
-pub use rustc_hir::{self as hir, def_id::CRATE_DEF_ID};
-pub use rustc_middle::{
-    self as middle,
-    ty::{self, TyCtxt},
+pub use bridge::{
+    TyCtxt,
+    hir::{self, def_id::CRATE_DEF_ID},
+    middle::ty,
+    session,
+    span::{Ident, Span},
 };
-pub use rustc_session as session;
-pub use rustc_span::{self as span, Ident, Span};
 
+pub mod binding;
 pub mod driver;
 pub mod fix;
+mod json;
 pub mod report;

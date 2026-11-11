@@ -1,12 +1,7 @@
 #![feature(rustc_private)]
 
-extern crate rustc_hir;
-extern crate rustc_middle;
-extern crate rustc_span;
-
-use rustc_hir::{self as hir, FnSig, Generics, def_id::LocalDefId};
-use rustc_middle::{self as middle, ty::TyCtxt};
-use rustc_span::{BytePos, FileName, Ident, SourceFile, Span, source_map::FileLoader};
+use bridge::hir::{FnSig, Generics, def_id::LocalDefId};
+use bridge::span::{Ident, SourceFile, source_map::FileLoader};
 
 use std::collections::BTreeMap;
 use std::io;
@@ -66,8 +61,7 @@ pub struct TargetFunc<'tcx> {
     pub is_return_opaque: bool,
 }
 
-pub fn annotate_all() {}
-
+/// Apply edits to the source string
 pub fn apply(source: &str, edits: &[Edit]) -> Result<String, EditError> {
     let mut ordered: Vec<_> = edits.iter().collect();
     ordered.sort_by_key(|edit| (edit.span.lo, edit.span.hi));
@@ -99,6 +93,7 @@ pub fn apply(source: &str, edits: &[Edit]) -> Result<String, EditError> {
     result.push_str(&source[cursor..]);
     Ok(result)
 }
+/// Apply edits for each files
 pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
     tracing::info!("{} edits to apply", edits.len());
     let mut grouped = BTreeMap::new();

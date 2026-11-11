@@ -1,33 +1,35 @@
 use super::TargetFunc;
-use crate::{
-    FileName, Ident, TyCtxt,
-    hir::{
-        self, AmbigArg, Block, GenericParam, GenericParamKind, ImplItemKind, ItemKind, Node,
-        TraitItemKind, Ty, TyKind,
-        def::DefKind,
-        def_id::LOCAL_CRATE,
-        intravisit::{self, Visitor},
-    },
-    middle,
+use bridge::FromRustc;
+use bridge::TyCtxt;
+use bridge::hir::{
+    self, AmbigArg, Block, GenericParam, GenericParamKind, ImplItemKind, ItemKind, Node,
+    TraitItemKind, Ty, TyKind,
+    def::DefKind,
+    def_id::LOCAL_CRATE,
+    intravisit::{self, Visitor},
 };
-use models::SkipReason;
+use bridge::middle;
+use bridge::span::{FileName, Ident};
+use models::{FunctionKey, SkipReason};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
+pub fn collect_functions<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    preserved: &BTreeSet<FunctionKey>,
+) -> Vec<TargetFunc<'tcx>> {
     let mut target_funcs = Vec::new();
 
     for owner in tcx.hir_crate_items(()).owners() {
         let def_id = owner.def_id;
         let def_path = tcx.def_path_str(def_id.to_def_id());
 
-        // TODO: comment
         if !matches!(tcx.def_kind(def_id), DefKind::Fn | DefKind::AssocFn) {
             tracing::trace!("{def_path}'s DefKind is not Fn or AssocFn; skip");
             continue;
         }
         tracing::trace!("collecting function {def_path}");
 
-        // TODO: comment
         let (signature, generics, ident) = match tcx.hir_node_by_def_id(def_id) {
             Node::Item(item) => match item.kind {
                 ItemKind::Fn {
@@ -121,6 +123,7 @@ pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
             tracing::trace!("file not found on local; skip");
             skipped.push(SkipReason::Unknown);
         }
+        // source file check on temporary file;
         if file
             .as_deref()
             .is_some_and(|path| !matches!(crate::files::mirror_of(path), Ok(Some(_))))
@@ -128,6 +131,12 @@ pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
             tracing::trace!("{def_path} is in a file that is never edited; skip");
             skipped.push(SkipReason::ReadOnlyFile);
         }
+
+        if preserved.contains(&FunctionKey::from_rustc((tcx, def_id))) {
+            tracing::trace!("{def_path} keeps its original binding; skip");
+            skipped.push(SkipReason::PreserveBinding);
+        }
+
         let mut unsafe_check = UnsafeCheck {
             tcx,
             exists: signature.header.is_unsafe(),

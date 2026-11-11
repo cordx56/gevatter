@@ -1,15 +1,16 @@
 #![feature(rustc_private)]
 
-use bridge::FromRustc;
 use bridge::borrowck;
 use bridge::hir::{
     def::DefKind,
     def_id::{CRATE_DEF_ID, LOCAL_CRATE, LocalDefId},
 };
-use bridge::middle::ty::{self, TyCtxt};
+use bridge::middle::ty;
+use bridge::{FromRustc, TyCtxt};
 use indexmap::IndexMap;
 use models::SkipReason;
 
+pub mod binding;
 pub mod callee;
 pub mod outlives;
 pub mod region_name;

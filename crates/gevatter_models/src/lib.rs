@@ -23,7 +23,7 @@ impl std::fmt::Display for Region {
 }
 impl std::fmt::Debug for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("Region({})", self.to_string()))
+        write!(f, "Region({})", self)
     }
 }
 
@@ -65,6 +65,7 @@ pub enum SkipReason {
     /// rustc can refer files something we should not edit;
     /// e.g. outside of workspace or inside target dir
     ReadOnlyFile,
+    PreserveBinding,
     Unknown,
 }
 
@@ -106,8 +107,7 @@ impl From<LifetimeAnnotation> for String {
 }
 impl std::fmt::Display for LifetimeAnnotation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("'")?;
-        f.write_str(&self.0)
+        write!(f, "'{}", self.0)
     }
 }
 
@@ -169,6 +169,7 @@ pub enum UnfixableReason {
     UnnamedRegion(RequiredOutlive),
     DiagnosticsRemain,
     NoFixpoint,
+    WouldChangeBinding(Vec<RequiredOutlive>),
 }
 impl std::fmt::Display for UnfixableReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -176,7 +177,96 @@ impl std::fmt::Display for UnfixableReason {
             Self::UnnamedRegion(required) => write!(f, "`{required}` has an unnamed region"),
             Self::DiagnosticsRemain => f.write_str("diagnostics remain"),
             Self::NoFixpoint => f.write_str("no fixpoint"),
+            Self::WouldChangeBinding(required) => {
+                let required: Vec<_> = required.iter().map(RequiredOutlive::to_string).collect();
+                write!(f, "`{}` would change binding", required.join(", "))
+            }
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Debug)]
+#[serde(transparent)]
+pub struct FunctionKey(String);
+impl From<String> for FunctionKey {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+impl std::fmt::Display for FunctionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Binding {
+    Early,
+    Late,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
+#[serde(transparent)]
+pub struct SignatureBinding(Vec<Option<Binding>>);
+impl FromIterator<Option<Binding>> for SignatureBinding {
+    fn from_iter<T: IntoIterator<Item = Option<Binding>>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+impl SignatureBinding {
+    pub fn change_to(&self, new: &Self) -> BindingChange {
+        if self.0.len() != new.0.len() {
+            return BindingChange::Incomparable;
+        }
+        let slots = |from, to| -> Vec<usize> {
+            self.0
+                .iter()
+                .zip(new.0.iter())
+                .enumerate()
+                .filter(|(_, (old, new))| **old == Some(from) && **new == Some(to))
+                .map(|(slot, _)| slot)
+                .collect()
+        };
+        let late_to_early = slots(Binding::Late, Binding::Early);
+        let early_to_late = slots(Binding::Early, Binding::Late);
+        match (late_to_early.is_empty(), early_to_late.is_empty()) {
+            (true, true) => BindingChange::Unchanged,
+            (false, true) => BindingChange::LateToEarly {
+                slots: late_to_early,
+            },
+            (true, false) => BindingChange::EarlyToLate {
+                slots: early_to_late,
+            },
+            (false, false) => BindingChange::Both {
+                late_to_early,
+                early_to_late,
+            },
+        }
+    }
+}
+
+/// Report lifetime annotation early/late binding changes.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BindingChange {
+    #[default]
+    Unchanged,
+    LateToEarly {
+        slots: Vec<usize>,
+    },
+    EarlyToLate {
+        slots: Vec<usize>,
+    },
+    Both {
+        late_to_early: Vec<usize>,
+        early_to_late: Vec<usize>,
+    },
+    Incomparable,
+}
+impl BindingChange {
+    pub fn is_changed(&self) -> bool {
+        !matches!(self, Self::Unchanged | Self::Incomparable)
     }
 }
 
@@ -194,6 +284,7 @@ pub struct FunctionReport {
     pub def_path: String,
     pub status: FunctionStatus,
     pub where_added: Vec<LifetimeRelation>,
+    pub binding_change: BindingChange,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -244,9 +335,9 @@ impl CrateReport {
                     status => status,
                 };
                 FunctionReport {
-                    def_path: function.def_path,
                     status,
                     where_added,
+                    ..function
                 }
             })
             .collect();

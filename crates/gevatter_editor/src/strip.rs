@@ -1,17 +1,14 @@
-use bridge::FromRustc;
-use bridge::{
-    TyCtxt,
-    hir::{
-        self,
-        def_id::LocalDefId,
-        intravisit::{self, Visitor},
-    },
-    middle,
+use bridge::hir::{
+    self,
+    def_id::LocalDefId,
+    intravisit::{self, Visitor},
 };
+use bridge::middle;
+use bridge::{FromRustc, TyCtxt};
 use std::collections::HashSet;
 
 pub fn collect(tcx: TyCtxt<'_>) {
-    for target in super::collectors::collect_functions(tcx) {
+    for target in super::collectors::collect_functions(tcx, &Default::default()) {
         let span = models::Span::from_rustc((&target.source, target.signature.span));
         let hi = span
             .hi

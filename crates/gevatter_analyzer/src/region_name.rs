@@ -1,4 +1,4 @@
-use crate::{LocalDefId, TyCtxt, ty};
+use bridge::{TyCtxt, hir::def_id::LocalDefId, middle::ty};
 use models::{LifetimeAnnotation, Region, RegionKind, ResolvedRegion};
 use std::collections::BTreeMap;
 

@@ -1,7 +1,7 @@
-use crate::TyCtxt;
-use bridge::FromRustc;
+use bridge::{FromRustc, TyCtxt};
 use indexmap::IndexMap;
-use models::SkipReason;
+use models::{FunctionKey, SkipReason};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -20,8 +20,9 @@ pub enum PredicateLocation {
 
 pub fn collect_predicates_locations(
     tcx: TyCtxt<'_>,
+    preserved: &BTreeSet<FunctionKey>,
 ) -> IndexMap<crate::LocalDefId, PredicateLocation> {
-    crate::collectors::collect_functions(tcx)
+    crate::collectors::collect_functions(tcx, preserved)
         .into_iter()
         .map(|func| {
             if func
