@@ -1,4 +1,5 @@
-use crate::{
+use bridge::FromRustc;
+use bridge::{
     TyCtxt,
     hir::{
         self,
@@ -11,10 +12,10 @@ use std::collections::HashSet;
 
 pub fn collect(tcx: TyCtxt<'_>) {
     for target in super::collectors::collect_functions(tcx) {
-        let span = models::Span::new(&target.source, target.signature.span);
+        let span = models::Span::from_rustc((&target.source, target.signature.span));
         let hi = span
             .hi
-            .max(models::Span::new(&target.source, target.generics.where_clause_span).hi);
+            .max(models::Span::from_rustc((&target.source, target.generics.where_clause_span)).hi);
 
         let eligible = target.skipped.is_empty();
         let has_param: HashSet<_> = target
@@ -78,8 +79,8 @@ pub fn collect(tcx: TyCtxt<'_>) {
                     position: models::SignaturePosition::Params(0),
                     polarity: models::Polarity::Inv,
                     is_self_ref: false,
-                    syntax: models::SlotSyntax::from(lifetime.source),
-                    span: models::Span::new(&target.source, lifetime.ident.span),
+                    syntax: models::SlotSyntax::from_rustc(lifetime.source),
+                    span: models::Span::from_rustc((&target.source, lifetime.ident.span)),
                 })
                 .collect();
             let mut after = before.clone();

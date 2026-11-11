@@ -67,6 +67,7 @@ name = "gevatter_analyzer"
 version = "0.1.0"
 dependencies = [
  "gevatter_models",
+ "gevatter_rustc_bridge",
  "indexmap",
  "tracing",
 ]
@@ -87,6 +88,7 @@ dependencies = [
  "cargo_metadata",
  "gevatter_analyzer",
  "gevatter_models",
+ "gevatter_rustc_bridge",
  "indexmap",
  "thiserror",
  "tracing",
@@ -105,6 +107,13 @@ dependencies = [
 [[package]]
 name = "gevatter_models"
 version = "0.1.0"
+
+[[package]]
+name = "gevatter_rustc_bridge"
+version = "0.1.0"
+dependencies = [
+ "gevatter_models",
+]
 
 [[package]]
 name = "hashbrown"

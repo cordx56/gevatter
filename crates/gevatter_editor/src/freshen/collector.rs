@@ -6,6 +6,7 @@ use crate::{
         intravisit::{self, Visitor},
     },
 };
+use bridge::FromRustc;
 use models::SkipReason;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -130,7 +131,11 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
         let Some(file) = name.local_path() else {
             continue;
         };
-        let Ok(text) = std::fs::read_to_string(file) else {
+        if !matches!(crate::files::mirror_of(file), Ok(Some(_))) {
+            continue;
+        }
+        let Ok(text) = TemporaryFileLoader.read_file(file) else {
+            tracing::warn!("failed to read file in impl collection process; skip ({file:?})");
             continue;
         };
         let report = FunctionFreshen {
@@ -317,7 +322,7 @@ struct Collector {
 }
 impl Collector {
     fn push_edit(&mut self, span: Span, replace_with: String) {
-        let span = models::Span::new(&self.source, span);
+        let span = models::Span::from_rustc((&self.source, span));
         self.report.edits.push(Edit {
             krate: self.krate.clone(),
             file: self.file.clone(),

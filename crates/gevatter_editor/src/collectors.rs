@@ -121,6 +121,13 @@ pub fn collect_functions(tcx: TyCtxt<'_>) -> Vec<TargetFunc<'_>> {
             tracing::trace!("file not found on local; skip");
             skipped.push(SkipReason::Unknown);
         }
+        if file
+            .as_deref()
+            .is_some_and(|path| !matches!(crate::files::mirror_of(path), Ok(Some(_))))
+        {
+            tracing::trace!("{def_path} is in a file that is never edited; skip");
+            skipped.push(SkipReason::ReadOnlyFile);
+        }
         let mut unsafe_check = UnsafeCheck {
             tcx,
             exists: signature.header.is_unsafe(),

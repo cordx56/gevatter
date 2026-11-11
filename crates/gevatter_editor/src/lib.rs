@@ -100,6 +100,7 @@ pub fn apply(source: &str, edits: &[Edit]) -> Result<String, EditError> {
     Ok(result)
 }
 pub fn apply_to_file(edits: &[Edit]) -> io::Result<()> {
+    tracing::info!("{} edits to apply", edits.len());
     let mut grouped = BTreeMap::new();
     for edit in edits {
         grouped

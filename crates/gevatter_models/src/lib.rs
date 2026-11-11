@@ -1,14 +1,4 @@
-#![feature(rustc_private)]
-
-extern crate rustc_borrowck;
-extern crate rustc_hir;
-extern crate rustc_middle;
-extern crate rustc_span;
-
-use rustc_borrowck::consumers as borrowck;
-use rustc_hir as hir;
-use rustc_middle::ty;
-use rustc_span as span;
+/// Common models which are used in Gevatter crates
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Region(u32);
@@ -17,14 +7,9 @@ impl Region {
         self.0
     }
 }
-impl From<borrowck::PoloniusRegionVid> for Region {
-    fn from(value: borrowck::PoloniusRegionVid) -> Self {
-        Self(value.as_u32())
-    }
-}
-impl From<ty::RegionVid> for Region {
-    fn from(value: ty::RegionVid) -> Self {
-        Self(value.as_u32())
+impl From<u32> for Region {
+    fn from(value: u32) -> Self {
+        Self(value)
     }
 }
 impl std::fmt::Display for Region {
@@ -61,7 +46,7 @@ pub enum RegionKind {
     Anonymous,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum SkipReason {
     WellFormednessErrors,
     ObjectLifetimeDefault,
@@ -72,6 +57,9 @@ pub enum SkipReason {
     TypeParameters,
     UnsafeBody,
     MacroExpanded,
+    /// rustc can refer files something we should not edit;
+    /// e.g. outside of workspace or inside target dir
+    ReadOnlyFile,
     Unknown,
 }
 
@@ -81,11 +69,6 @@ pub struct Span {
     pub hi: usize,
 }
 impl Span {
-    pub fn new(source: &span::SourceFile, span: span::Span) -> Self {
-        let lo = source.original_relative_byte_pos(span.lo()).0 as usize;
-        let hi = source.original_relative_byte_pos(span.hi()).0 as usize;
-        Self { lo, hi }
-    }
     pub fn is_out_of_range(&self, text: &str) -> bool {
         text.len() <= self.lo || text.len() < self.hi
     }
@@ -123,6 +106,80 @@ pub struct LifetimeRelation {
     pub shorter: LifetimeAnnotation,
     pub longer: LifetimeAnnotation,
 }
+impl std::fmt::Display for LifetimeRelation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.longer, self.shorter)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedRegion {
+    pub region: Region,
+    pub name: Option<LifetimeAnnotation>,
+    pub kind: RegionKind,
+}
+impl std::fmt::Display for ResolvedRegion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.name {
+            Some(name) => name.fmt(f),
+            None => self.region.fmt(f),
+        }
+    }
+}
+
+/// Relationship between resolved region lifetimes
+/// This relations is appeared in source as `'longer: 'shorter`
+#[derive(Clone, Debug)]
+pub struct RequiredOutlive {
+    pub longer: ResolvedRegion,
+    pub shorter: ResolvedRegion,
+}
+impl RequiredOutlive {
+    pub fn named(&self) -> Option<LifetimeRelation> {
+        self.longer
+            .name
+            .as_ref()
+            .zip(self.shorter.name.as_ref())
+            .map(|(longer, shorter)| LifetimeRelation {
+                shorter: shorter.clone(),
+                longer: longer.clone(),
+            })
+    }
+}
+impl std::fmt::Display for RequiredOutlive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.longer, self.shorter)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum UnfixableReason {
+    UnnamedRegion(RequiredOutlive),
+    DiagnosticsRemain,
+}
+impl std::fmt::Display for UnfixableReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnnamedRegion(required) => write!(f, "`{required}` has an unnamed region"),
+            Self::DiagnosticsRemain => f.write_str("diagnostics remain"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum FunctionStatus {
+    Unchanged,
+    Fixed,
+    Unfixable(UnfixableReason),
+    Skipped(Vec<SkipReason>),
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionReport {
+    pub def_path: String,
+    pub status: FunctionStatus,
+    pub where_added: Vec<LifetimeRelation>,
+}
 
 /// Position in signature to interact
 #[derive(Clone, Copy, Debug)]
@@ -136,14 +193,6 @@ pub enum SignaturePosition {
 pub enum SlotSyntax {
     Reference,
     Path,
-}
-impl From<hir::LifetimeSource> for SlotSyntax {
-    fn from(value: hir::LifetimeSource) -> Self {
-        match value {
-            hir::LifetimeSource::Reference => Self::Reference,
-            _ => Self::Path,
-        }
-    }
 }
 
 /// TODO: description!

@@ -1,5 +1,5 @@
 use crate::{LocalDefId, TyCtxt, ty};
-use models::{LifetimeAnnotation, Region, RegionKind, RegionName};
+use models::{LifetimeAnnotation, Region, RegionKind, ResolvedRegion};
 use std::collections::BTreeMap;
 
 /// A map from [`Region`] to its name and its kind.
@@ -8,6 +8,15 @@ pub struct Regions(BTreeMap<Region, (Option<LifetimeAnnotation>, RegionKind)>);
 impl Regions {
     pub fn annotation(&self, region: &Region) -> Option<&LifetimeAnnotation> {
         self.0.get(region).map(|(name, _)| name.as_ref()).flatten()
+    }
+
+    pub fn resolve(&self, region: Region) -> ResolvedRegion {
+        let (name, kind) = self
+            .0
+            .get(&region)
+            .cloned()
+            .unwrap_or((None, RegionKind::Anonymous));
+        ResolvedRegion { region, name, kind }
     }
 
     pub fn construct(

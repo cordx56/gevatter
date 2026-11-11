@@ -1,4 +1,5 @@
 use editor::TemporaryFileLoader;
+use models::FunctionStatus;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
@@ -68,7 +69,6 @@ impl Callbacks for GevatterDriver {
                 // ensure temporary files are cleaned on phase 1
                 TemporaryFileLoader::ensure_temp_refresh();
                 let edits = editor::freshen::freshen_annotations(tcx);
-                tracing::info!("{} edits to apply", edits.len());
                 if let Err(_) = editor::apply_to_file(&edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
@@ -82,11 +82,17 @@ impl Callbacks for GevatterDriver {
             Phase::AnalyzeAndFix => {
                 tracing::info!("phase {}: analyze and fix", Phase::AnalyzeAndFix as u8);
                 let outlive_reports = analyzer::report_outlives(tcx);
-                let predicates_to_insert = editor::predicates::collect_predicates_locations(tcx);
-                let edits =
-                    editor::resolver::outlive_report_edits(&outlive_reports, &predicates_to_insert);
-                tracing::info!("{} edits to apply", edits.len());
-                if let Err(_) = editor::apply_to_file(&edits) {
+                let locations = editor::predicates::collect_predicates_locations(tcx);
+                let round = editor::resolver::outlive_report_edits(&outlive_reports, &locations);
+                for function in &round.functions {
+                    match &function.status {
+                        FunctionStatus::Unfixable(reason) => {
+                            tracing::warn!("{} is unfixable: {reason}", function.def_path)
+                        }
+                        status => tracing::debug!("{}: {status:?}", function.def_path),
+                    }
+                }
+                if let Err(_) = editor::apply_to_file(&round.edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
                     tracing::info!("edits applied; re-exec for next phase");

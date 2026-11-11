@@ -1,4 +1,4 @@
-use models::{LifetimeRelation, Region};
+use models::{Region, RequiredOutlive, SkipReason};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Compute reachability of edges
@@ -62,6 +62,6 @@ pub struct OutliveRelationReport {
     pub def_path: String,
     pub krate: String,
     pub had_diagnostics: bool,
-    pub required: OutliveRelations,
-    pub named_required: Vec<LifetimeRelation>,
+    pub borrowck_skipped: Option<SkipReason>,
+    pub required: Vec<RequiredOutlive>,
 }
