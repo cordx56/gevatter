@@ -1,6 +1,10 @@
 /// Common models which are used in Gevatter crates
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub mod signature;
+
+pub use signature::*;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[serde(transparent)]
@@ -66,10 +70,13 @@ pub enum SkipReason {
     /// e.g. outside of workspace or inside target dir
     ReadOnlyFile,
     PreserveBinding,
+    AnonymousLifetime,
+    BoundPredicate,
+    LifetimeInBody,
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct Span {
     pub lo: usize,
     pub hi: usize,
@@ -88,6 +95,18 @@ impl LifetimeAnnotation {
     /// Do NOT use this to print lifetime annotations!
     pub fn reveal(&self) -> &str {
         &self.0
+    }
+    pub fn static_lifetime() -> Self {
+        Self::from("static")
+    }
+    pub fn anonymous() -> Self {
+        Self::from("_")
+    }
+    pub fn is_static(&self) -> bool {
+        self.0 == "static"
+    }
+    pub fn is_anonymous(&self) -> bool {
+        self.0 == "_"
     }
 }
 impl From<&str> for LifetimeAnnotation {
@@ -112,10 +131,15 @@ impl std::fmt::Display for LifetimeAnnotation {
 }
 
 /// Relationship between lifetime annotations
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct LifetimeRelation {
     pub shorter: LifetimeAnnotation,
     pub longer: LifetimeAnnotation,
+}
+impl LifetimeRelation {
+    pub fn mentions(&self, lifetime: &LifetimeAnnotation) -> bool {
+        &self.shorter == lifetime || &self.longer == lifetime
+    }
 }
 impl std::fmt::Display for LifetimeRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -279,12 +303,30 @@ pub enum FunctionStatus {
     Skipped(Vec<SkipReason>),
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Simplification {
+    #[default]
+    Untouched,
+    Simplified {
+        steps: Vec<Step>,
+    },
+    Reverted {
+        steps: Vec<Step>,
+    },
+    Skipped {
+        reasons: Vec<SkipReason>,
+    },
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FunctionReport {
     pub def_path: String,
     pub status: FunctionStatus,
     pub where_added: Vec<LifetimeRelation>,
     pub binding_change: BindingChange,
+    #[serde(default)]
+    pub simplification: Simplification,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -321,14 +363,51 @@ impl CrateReport {
         self.functions = known.into_values().collect();
     }
 
+    pub fn record_simplification(
+        &mut self,
+        simplifications: impl IntoIterator<Item = (String, Simplification)>,
+    ) {
+        let mut known = self.take_functions();
+        for (def_path, simplification) in simplifications {
+            if let Some(known) = known.get_mut(&def_path) {
+                known.simplification = simplification;
+            }
+        }
+        self.functions = known.into_values().collect();
+    }
+
+    pub fn settled(&self) -> BTreeSet<String> {
+        self.functions
+            .iter()
+            .filter(|function| matches!(function.status, FunctionStatus::Unchanged))
+            .map(|function| function.def_path.clone())
+            .collect()
+    }
+
+    pub fn is_simplified(&self) -> bool {
+        self.functions
+            .iter()
+            .any(|function| matches!(function.simplification, Simplification::Simplified { .. }))
+    }
+
+    pub fn revert_simplification(&mut self) {
+        for function in &mut self.functions {
+            if let Simplification::Simplified { steps } = &mut function.simplification {
+                function.simplification = Simplification::Reverted {
+                    steps: std::mem::take(steps),
+                };
+            }
+        }
+    }
+
     pub fn conclude(&mut self, functions: Vec<FunctionReport>) {
         let mut known = self.take_functions();
         self.functions = functions
             .into_iter()
             .map(|function| {
-                let where_added = known
+                let (where_added, simplification) = known
                     .remove(&function.def_path)
-                    .map(|known| known.where_added)
+                    .map(|known| (known.where_added, known.simplification))
                     .unwrap_or_default();
                 let status = match function.status {
                     FunctionStatus::Unchanged if !where_added.is_empty() => FunctionStatus::Fixed,
@@ -337,6 +416,7 @@ impl CrateReport {
                 FunctionReport {
                     status,
                     where_added,
+                    simplification,
                     ..function
                 }
             })
@@ -353,70 +433,4 @@ impl CrateReport {
             .map(|function| (function.def_path.clone(), function))
             .collect()
     }
-}
-
-/// Position in signature to interact
-#[derive(Clone, Copy, Debug)]
-pub enum SignaturePosition {
-    Params(usize),
-    Return,
-}
-
-/// TODO: description!
-#[derive(Clone, Copy, Debug)]
-pub enum SlotSyntax {
-    Reference,
-    Path,
-}
-
-/// TODO: description!
-#[derive(Clone, Copy, Debug)]
-pub enum Polarity {
-    Pos,
-    Neg,
-    Inv,
-}
-
-/// TODO: description!
-#[derive(Clone, Debug)]
-pub struct Slot {
-    pub lifetime: LifetimeAnnotation,
-    pub position: SignaturePosition,
-    pub polarity: Polarity,
-    pub is_self_ref: bool,
-    pub syntax: SlotSyntax,
-    pub span: Span,
-}
-
-/// Represents function/method's signature
-#[derive(Default, Clone, Debug)]
-pub struct Signature {
-    pub params: Vec<LifetimeAnnotation>,
-    pub late_bound: Vec<LifetimeAnnotation>,
-    pub fixed: Vec<LifetimeAnnotation>,
-    pub slots: Vec<Slot>,
-    pub predicates: Vec<LifetimeRelation>,
-    pub known: Vec<LifetimeRelation>,
-}
-
-/// TODO: description!
-pub enum Step {
-    Equate {
-        removed: LifetimeAnnotation,
-        into: LifetimeAnnotation,
-    },
-    Substitute {
-        from: LifetimeAnnotation,
-        to: LifetimeAnnotation,
-    },
-    Drop {
-        lifetime: LifetimeAnnotation,
-    },
-    Elide {
-        lifetime: LifetimeAnnotation,
-    },
-    Rename {
-        from: LifetimeAnnotation,
-        to: LifetimeAnnotation,
-    },
 }
