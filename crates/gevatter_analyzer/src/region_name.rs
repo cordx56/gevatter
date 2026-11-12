@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 pub struct Regions(BTreeMap<Region, (Option<LifetimeAnnotation>, RegionKind)>);
 impl Regions {
     pub fn annotation(&self, region: &Region) -> Option<&LifetimeAnnotation> {
-        self.0.get(region).map(|(name, _)| name.as_ref()).flatten()
+        self.0.get(region).and_then(|(name, _)| name.as_ref())
     }
 
     pub fn resolve(&self, region: Region) -> ResolvedRegion {
@@ -34,14 +34,11 @@ impl Regions {
             });
         let sig = tcx.fn_sig(def_id).skip_binder();
         let late_bound = sig.bound_vars().into_iter().map(|var| match var {
-            ty::BoundVariableKind::Region(kind) => match kind {
-                ty::BoundRegionKind::Named(id) => {
-                    let name = tcx.item_name(id);
-                    // FIXME: is this needed?
-                    (name.as_str() != "'_").then(|| LifetimeAnnotation::from(name.as_str()))
-                }
-                _ => None,
-            },
+            ty::BoundVariableKind::Region(ty::BoundRegionKind::Named(id)) => {
+                let name = tcx.item_name(id);
+                // FIXME: is this needed?
+                (name.as_str() != "'_").then(|| LifetimeAnnotation::from(name.as_str()))
+            }
             _ => None,
         });
 

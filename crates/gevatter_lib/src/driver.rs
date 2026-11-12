@@ -100,7 +100,7 @@ impl Callbacks for GevatterDriver {
 
         // don't forget initializing unit path;
         // this is used for storing all artifacts
-        TemporaryFileLoader::ensure_unit_path(&config);
+        TemporaryFileLoader::ensure_unit_path(config);
         match self.current_phase {
             Phase::AnnotationFreshen(0) => {
                 let path = TemporaryFileLoader::ensure_temp_refresh();
@@ -141,7 +141,7 @@ impl Callbacks for GevatterDriver {
                 bindings.store(&state);
                 let freshened = editor::freshen::freshen_annotations(tcx, &state.preserved);
                 IntroducedFile::current().store(&freshened.introduced);
-                if let Err(_) = editor::apply_to_file(&freshened.edits) {
+                if editor::apply_to_file(&freshened.edits).is_err() {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
                     tracing::info!("edits applied; re-exec for next phase");
@@ -185,7 +185,7 @@ impl Callbacks for GevatterDriver {
                     }
                 }
 
-                let next_phase = if let Err(_) = editor::apply_to_file(&round.edits) {
+                let next_phase = if editor::apply_to_file(&round.edits).is_err() {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                     None
                 } else {

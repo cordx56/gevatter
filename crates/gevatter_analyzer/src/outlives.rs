@@ -23,10 +23,10 @@ impl ReachabilityGraph {
         let mut visited = BTreeSet::new();
         let mut pending = vec![from];
         while let Some(region) = pending.pop() {
-            if visited.insert(region) {
-                if let Some(next) = self.edges.get(&region) {
-                    pending.extend(next);
-                }
+            if visited.insert(region)
+                && let Some(next) = self.edges.get(&region)
+            {
+                pending.extend(next);
             }
         }
         visited.into_iter()

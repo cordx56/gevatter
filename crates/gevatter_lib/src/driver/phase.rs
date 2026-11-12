@@ -5,8 +5,7 @@ pub const ENV_VAR_NAME: &str = "GEVATTER_PHASE";
 pub static MAX_FIX_ROUNDS: LazyLock<usize> = LazyLock::new(|| {
     env::var("GEVATTER_MAX_FIX_ROUNDS")
         .ok()
-        .map(|v| v.parse().ok())
-        .flatten()
+        .and_then(|v| v.parse().ok())
         .unwrap_or(10)
 });
 
@@ -23,7 +22,7 @@ pub enum Phase {
     Fallback,
 }
 impl Phase {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         let split: Vec<_> = s.split(".").collect();
         match split.len() {
             1 => match split[0] {
@@ -46,7 +45,7 @@ impl Phase {
 impl Phase {
     pub fn current_phase() -> Option<Self> {
         std::env::var(ENV_VAR_NAME)
-            .map(|val| Phase::from_str(&val))
+            .map(|val| Phase::parse_str(&val))
             .ok()
             .flatten()
     }

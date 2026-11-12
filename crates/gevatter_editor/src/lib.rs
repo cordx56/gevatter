@@ -14,7 +14,6 @@ pub mod freshen;
 pub mod predicates;
 pub mod resolver;
 pub mod simplify;
-pub mod strip;
 
 pub use files::TemporaryFileLoader;
 

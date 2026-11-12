@@ -11,8 +11,7 @@ pub static CARGO_METADATA: LazyLock<Option<cargo_metadata::Metadata>> =
 pub static WORKSPACE_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
     if let Some(path) = CARGO_METADATA
         .as_ref()
-        .map(|v| fs::canonicalize(v.workspace_root.as_std_path().to_path_buf()).ok())
-        .flatten()
+        .and_then(|v| fs::canonicalize(v.workspace_root.as_std_path()).ok())
     {
         path
     } else {
@@ -22,14 +21,12 @@ pub static WORKSPACE_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static TARGET_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     if let Some(v) = env::var("CARGO_TARGET_DIR")
         .ok()
-        .map(|v| fs::canonicalize(v).ok())
-        .flatten()
+        .and_then(|v| fs::canonicalize(v).ok())
     {
         v
     } else if let Some(path) = CARGO_METADATA
         .as_ref()
-        .map(|v| fs::canonicalize(v.target_directory.as_std_path().to_path_buf()).ok())
-        .flatten()
+        .and_then(|v| fs::canonicalize(v.target_directory.as_std_path()).ok())
     {
         path
     } else {
@@ -108,7 +105,7 @@ impl TemporaryFileLoader {
             .as_deref()
             .unwrap_or_else(|| conf.input.filestem());
         let extra_filename = &conf.opts.cg.extra_filename;
-        ensure_unit_path(&krate, extra_filename);
+        ensure_unit_path(krate, extra_filename);
         unit_out_dir()
     }
     pub fn ensure_temp_refresh() -> PathBuf {

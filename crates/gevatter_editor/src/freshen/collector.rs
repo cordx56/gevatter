@@ -168,11 +168,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             name: LifetimeNamer::new(used_checker.0.iter().cloned()),
             impl_names: Some((
                 models::Signature {
-                    fixed: used_checker
-                        .0
-                        .into_iter()
-                        .map(models::LifetimeAnnotation::from)
-                        .collect(),
+                    fixed: used_checker.0,
                     ..Default::default()
                 },
                 Vec::new(),
@@ -342,7 +338,7 @@ impl Collector {
     }
     fn fresh(&mut self) -> models::LifetimeAnnotation {
         let mut name = self.name.next().unwrap();
-        if let Some((signature, steps)) = &mut self.impl_names {
+        if let Some((signature, _steps)) = &mut self.impl_names {
             signature.params.push(name);
             name = signature.params.last().unwrap().clone();
         }
@@ -391,7 +387,7 @@ impl<'hir> Visitor<'hir> for Collector {
         for arg in args.args {
             if let hir::GenericArg::Lifetime(lifetime) = arg
                 && lifetime.is_implicit()
-                && is_target(*lifetime)
+                && is_target(lifetime)
             {
                 if !inserted {
                     let names: Vec<_> = implicit.iter().map(|_| self.fresh()).collect();
