@@ -12,12 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.104"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
-
-[[package]]
 name = "camino"
 version = "1.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,14 +63,12 @@ dependencies = [
  "gevatter_models",
  "gevatter_rustc_bridge",
  "indexmap",
- "tracing",
 ]
 
 [[package]]
 name = "gevatter_driver"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "gevatter_lib",
  "tracing-subscriber",
 ]
@@ -89,6 +81,7 @@ dependencies = [
  "gevatter_analyzer",
  "gevatter_models",
  "gevatter_rustc_bridge",
+ "gevatter_simplify",
  "indexmap",
  "thiserror",
  "tracing",
@@ -117,6 +110,13 @@ dependencies = [
 
 [[package]]
 name = "gevatter_rustc_bridge"
+version = "0.1.0"
+dependencies = [
+ "gevatter_models",
+]
+
+[[package]]
+name = "gevatter_simplify"
 version = "0.1.0"
 dependencies = [
  "gevatter_models",

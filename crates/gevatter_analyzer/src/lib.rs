@@ -5,7 +5,6 @@ use bridge::hir::{
     def::DefKind,
     def_id::{CRATE_DEF_ID, LOCAL_CRATE, LocalDefId},
 };
-use bridge::middle::ty;
 use bridge::{FromRustc, TyCtxt};
 use indexmap::IndexMap;
 use models::SkipReason;
@@ -17,19 +16,19 @@ pub mod region_name;
 
 pub use outlives::OutliveRelationReport;
 
-pub fn report_outlives(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, OutliveRelationReport> {
-    // proceeding to borrowck may occur ICE if there are well-formedness type errors
+pub fn check_well_formedness(tcx: TyCtxt<'_>) -> Option<SkipReason> {
     for owner in tcx.hir_crate_items(()).owners() {
         if owner.def_id != CRATE_DEF_ID {
             tcx.ensure_ok().check_well_formed(owner.def_id);
         }
     }
+    (tcx.dcx().err_count() != 0).then_some(SkipReason::WellFormednessErrors)
+}
+
+pub fn report_outlives(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, OutliveRelationReport> {
+    // proceeding to borrowck may occur ICE if there are well-formedness type errors
     // check errors before borrowck
-    let borrowck_skipped = if tcx.dcx().err_count() == 0 {
-        None
-    } else {
-        Some(SkipReason::WellFormednessErrors)
-    };
+    let borrowck_skipped = check_well_formedness(tcx);
 
     let krate = tcx.crate_name(LOCAL_CRATE).to_string();
     let mut functions = IndexMap::new();

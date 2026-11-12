@@ -10,6 +10,7 @@ rustc_private = true
 models = { path = "../gevatter_models", package = "gevatter_models" }
 bridge = { path = "../gevatter_rustc_bridge", package = "gevatter_rustc_bridge" }
 analyzer = { path = "../gevatter_analyzer", package = "gevatter_analyzer" }
+simplify = { path = "../gevatter_simplify", package = "gevatter_simplify" }
 
 cargo_metadata.workspace = true
 indexmap.workspace = true

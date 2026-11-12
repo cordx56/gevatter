@@ -10,4 +10,3 @@ rustc_private = true
 gevatter_lib = { path = "../gevatter_lib" }
 
 tracing-subscriber.workspace = true
-anyhow.workspace = true

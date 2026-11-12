@@ -1,0 +1,7 @@
+[package]
+name = "gevatter_simplify"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+models = { path = "../gevatter_models", package = "gevatter_models" }

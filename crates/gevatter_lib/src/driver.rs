@@ -1,9 +1,12 @@
 use editor::TemporaryFileLoader;
-use models::FunctionStatus;
+use editor::simplify::Touched;
+use models::{CrateReport, FunctionStatus};
+use std::collections::BTreeSet;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
 use crate::binding::{self, BindingFile, BindingState};
+use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
 use bridge::TyCtxt;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
@@ -43,15 +46,39 @@ impl GevatterDriver {
             return ExitCode::SUCCESS;
         }
         if let Some(file) = self.verified.take() {
-            tracing::warn!("compilation failed after verification; fall back to the original");
             let mut report = file.load();
             report.verified = false;
-            file.store(&report);
-            if let Err(e) = self.re_exec(Phase::Fallback) {
-                tracing::error!("process exec error: {e:?}");
+            if report.is_simplified() {
+                tracing::warn!(
+                    "compilation failed after verification; retry without simplification"
+                );
+                self.revert_simplification(&file, report);
+            } else {
+                tracing::warn!("compilation failed after verification; fall back to the original");
+                file.store(&report);
+                if let Err(e) = self.re_exec(Phase::Fallback) {
+                    tracing::error!("process exec error: {e:?}");
+                }
             }
         }
         ExitCode::FAILURE
+    }
+    fn revert_simplification(&self, file: &ReportFile, mut report: CrateReport) {
+        let next_phase = match TemporaryFileLoader::restore_sources() {
+            Ok(path) => {
+                tracing::info!("unsimplified sources are restored to {path:?}");
+                report.revert_simplification();
+                Phase::Verification
+            }
+            Err(e) => {
+                tracing::error!("failed to restore unsimplified sources: {e:?}");
+                Phase::Fallback
+            }
+        };
+        file.store(&report);
+        if let Err(e) = self.re_exec(next_phase) {
+            tracing::error!("process exec error: {e:?}");
+        }
     }
     fn re_exec(&self, next_phase: Phase) -> std::io::Result<()> {
         let first = &self.args[0];
@@ -112,8 +139,9 @@ impl Callbacks for GevatterDriver {
                 }
                 .start_attempt(tcx, attempt);
                 bindings.store(&state);
-                let edits = editor::freshen::freshen_annotations(tcx, &state.preserved);
-                if let Err(_) = editor::apply_to_file(&edits) {
+                let freshened = editor::freshen::freshen_annotations(tcx, &state.preserved);
+                IntroducedFile::current().store(&freshened.introduced);
+                if let Err(_) = editor::apply_to_file(&freshened.edits) {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
                     tracing::info!("edits applied; re-exec for next phase");
@@ -164,10 +192,49 @@ impl Callbacks for GevatterDriver {
                     tracing::info!("edits applied; re-exec for next phase");
                     next_round
                 }
-                .or_else(|| self.current_phase.next_phase())
-                .unwrap();
+                .or_else(|| {
+                    self.current_phase
+                        .next_phase()
+                        .filter(|_| round.edits.is_empty())
+                })
+                .unwrap_or(Phase::Verification);
 
                 if let Err(e) = self.re_exec(next_phase) {
+                    tracing::error!("process exec error: {e:?}");
+                }
+                bridge::driver::Compilation::Stop
+            }
+            Phase::Simplify => {
+                let file = ReportFile::of(tcx);
+                let mut report = file.load();
+                let state = BindingFile::current().load();
+                let introduced = IntroducedFile::current().load();
+                let fixed: BTreeSet<_> = report
+                    .functions
+                    .iter()
+                    .filter(|function| !function.where_added.is_empty())
+                    .map(|function| function.def_path.clone())
+                    .collect();
+                let touched = Touched {
+                    introduced,
+                    fixed,
+                    settled: report.settled(),
+                    preserved: state.preserved,
+                };
+                let simplified = editor::simplify::simplify_signatures(tcx, &touched);
+                let applied = TemporaryFileLoader::snapshot_sources().and_then(|_| {
+                    editor::apply_to_file(&simplified.edits)
+                        .or_else(|e| TemporaryFileLoader::restore_sources().and(Err(e)))
+                });
+                match applied {
+                    Ok(()) => {
+                        tracing::info!("simplification applied; re-exec for next phase");
+                        report.record_simplification(simplified.functions);
+                        file.store(&report);
+                    }
+                    Err(e) => tracing::warn!("failed to apply simplification: {e:?}"),
+                }
+                if let Err(e) = self.re_exec(self.current_phase.next_phase().unwrap()) {
                     tracing::error!("process exec error: {e:?}");
                 }
                 bridge::driver::Compilation::Stop
@@ -181,6 +248,7 @@ impl Callbacks for GevatterDriver {
                 let changes = state.changes(tcx);
                 let file = ReportFile::of(tcx);
                 let mut report = file.load();
+                let settled = report.settled();
                 report.conclude(editor::resolver::verify_reports(
                     &outlive_reports,
                     &locations,
@@ -198,6 +266,15 @@ impl Callbacks for GevatterDriver {
                             function.binding_change,
                         );
                     }
+                }
+                let regressed = report.functions.iter().any(|function| {
+                    matches!(function.status, FunctionStatus::Unfixable(_))
+                        && settled.contains(&function.def_path)
+                });
+                if regressed && report.is_simplified() {
+                    tracing::warn!("verification failed after simplification; retry without it");
+                    self.revert_simplification(&file, report);
+                    return bridge::driver::Compilation::Stop;
                 }
                 let unpreserved = state.unpreserved(tcx, &changes);
                 if *binding::PRESERVE_BINDING && !unpreserved.is_empty() {

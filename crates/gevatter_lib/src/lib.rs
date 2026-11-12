@@ -11,5 +11,6 @@ pub use bridge::{
 pub mod binding;
 pub mod driver;
 pub mod fix;
+pub mod introduced;
 mod json;
 pub mod report;

@@ -10,10 +10,15 @@ pub static MAX_FIX_ROUNDS: LazyLock<usize> = LazyLock::new(|| {
         .unwrap_or(10)
 });
 
+pub static SIMPLIFY: LazyLock<bool> = LazyLock::new(|| {
+    !env::var("GEVATTER_SIMPLIFY").is_ok_and(|v| matches!(v.as_str(), "0" | "false"))
+});
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
     AnnotationFreshen(usize),
     AnalyzeAndFix(usize),
+    Simplify,
     Verification,
     Fallback,
 }
@@ -24,8 +29,9 @@ impl Phase {
             1 => match split[0] {
                 "1" => Some(Phase::AnnotationFreshen(0)),
                 "2" => Some(Phase::AnalyzeAndFix(0)),
-                "3" => Some(Phase::Verification),
-                "4" => Some(Phase::Fallback),
+                "3" => Some(Phase::Simplify),
+                "4" => Some(Phase::Verification),
+                "5" => Some(Phase::Fallback),
                 _ => None,
             },
             2 => match split[0] {
@@ -47,7 +53,8 @@ impl Phase {
     pub fn next_phase(&self) -> Option<Self> {
         match self {
             Phase::AnnotationFreshen(_) => Some(Phase::AnalyzeAndFix(0)),
-            Phase::AnalyzeAndFix(_) => Some(Phase::Verification),
+            Phase::AnalyzeAndFix(_) if *SIMPLIFY => Some(Phase::Simplify),
+            Phase::AnalyzeAndFix(_) | Phase::Simplify => Some(Phase::Verification),
             Phase::Verification => None,
             Phase::Fallback => None,
         }
@@ -68,8 +75,9 @@ impl std::fmt::Display for Phase {
         match self {
             Phase::AnnotationFreshen(sub) => f.write_str(&format!("1.{sub}")),
             Phase::AnalyzeAndFix(sub) => f.write_str(&format!("2.{sub}")),
-            Phase::Verification => f.write_str("3"),
-            Phase::Fallback => f.write_str("4"),
+            Phase::Simplify => f.write_str("3"),
+            Phase::Verification => f.write_str("4"),
+            Phase::Fallback => f.write_str("5"),
         }
     }
 }

@@ -57,6 +57,24 @@ pub fn report_path() -> PathBuf {
 pub fn binding_path() -> PathBuf {
     unit_out_dir().join("binding.json")
 }
+pub fn introduced_path() -> PathBuf {
+    unit_out_dir().join("introduced.json")
+}
+fn snapshot_dir() -> PathBuf {
+    unit_out_dir().join("unsimplified")
+}
+fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
+    fs::create_dir_all(to)?;
+    fs::read_dir(from)?.try_for_each(|entry| {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_tree(&entry.path(), &target)
+        } else {
+            fs::copy(entry.path(), target).map(drop)
+        }
+    })
+}
 pub fn mirror_of(path: &Path) -> io::Result<Option<(PathBuf, PathBuf)>> {
     let original = fs::canonicalize(path)?;
     if original.starts_with(&*TARGET_DIR) {
@@ -102,6 +120,18 @@ impl TemporaryFileLoader {
         let out_dir = edit_out_dir();
         let _ = fs::remove_dir_all(&out_dir);
         out_dir
+    }
+    pub fn snapshot_sources() -> io::Result<PathBuf> {
+        let snapshot = snapshot_dir();
+        let _ = fs::remove_dir_all(&snapshot);
+        copy_tree(&edit_out_dir(), &snapshot)?;
+        Ok(snapshot)
+    }
+    pub fn restore_sources() -> io::Result<PathBuf> {
+        let out_dir = edit_out_dir();
+        let _ = fs::remove_dir_all(&out_dir);
+        fs::rename(snapshot_dir(), &out_dir)?;
+        Ok(out_dir)
     }
     pub fn write_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
         let mirror = ensure_mirror(path)?.ok_or_else(|| {

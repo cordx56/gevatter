@@ -3,8 +3,8 @@ use analyzer::OutliveRelationReport;
 use bridge::hir::def_id::LocalDefId;
 use indexmap::IndexMap;
 use models::{
-    BindingChange, FunctionReport, FunctionStatus, LifetimeRelation, RequiredOutlive, SkipReason,
-    UnfixableReason,
+    BindingChange, FunctionReport, FunctionStatus, LifetimeRelation, RequiredOutlive,
+    Simplification, SkipReason, UnfixableReason,
 };
 
 #[derive(Clone, Debug)]
@@ -56,6 +56,7 @@ pub fn outlive_report_edits(
             status,
             where_added,
             binding_change: BindingChange::default(),
+            simplification: Simplification::default(),
         });
     }
     FixRound { edits, functions }
@@ -137,6 +138,7 @@ pub fn verify_reports(
                     .get(def_id)
                     .cloned()
                     .unwrap_or(BindingChange::Incomparable),
+                simplification: Simplification::default(),
             }
         })
         .collect()

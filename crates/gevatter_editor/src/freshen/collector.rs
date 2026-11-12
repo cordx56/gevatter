@@ -1,4 +1,4 @@
-use super::{naming::LifetimeNamer, *};
+use super::*;
 use bridge::FromRustc;
 use bridge::TyCtxt;
 use bridge::hir::{
@@ -6,7 +6,7 @@ use bridge::hir::{
     intravisit::{self, Visitor},
 };
 use bridge::span::{BytePos, FileName, Span};
-use models::{FunctionKey, SkipReason};
+use models::{FunctionKey, LifetimeNamer, SkipReason};
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
@@ -23,6 +23,7 @@ pub fn collect(
             bailed.push(SkipReason::ImplTraitReturn);
         }
         let mut report = FunctionFreshen {
+            key: FunctionKey::from_rustc((tcx, target.def_id)),
             def_path: target.def_path,
             introduced: Vec::new(),
             edits: Vec::new(),
@@ -41,12 +42,12 @@ pub fn collect(
                         .flat_map(|generics| generics.params.iter()),
                 )
                 .filter(|param| matches!(param.kind, GenericParamKind::Lifetime { .. }))
-                .map(|param| param.name.ident().to_string())
+                .map(|param| param.name.ident().to_string().into())
                 .chain(
                     impls
                         .get(&tcx.local_parent(target.def_id))
                         .into_iter()
-                        .flat_map(|imp| imp.introduced.iter().map(|l| l.to_string().to_owned())),
+                        .flat_map(|imp| imp.introduced.iter().map(|l| l.to_string().into())),
                 );
             let mut collector = Collector {
                 krate: krate.clone(),
@@ -141,6 +142,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             continue;
         };
         let report = FunctionFreshen {
+            key: FunctionKey::from_rustc((tcx, owner.def_id)),
             def_path: tcx.def_path_str(owner.def_id.to_def_id()),
             introduced: Vec::new(),
             edits: Vec::new(),
@@ -153,7 +155,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             imp.generics
                 .params
                 .iter()
-                .map(|param| param.name.ident().name.to_string())
+                .map(|param| param.name.ident().name.to_string().into())
                 .collect(),
         );
         for item_id in imp.items {
@@ -295,10 +297,10 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
     impls
 }
 
-struct UsedNameChecker(Vec<String>);
+struct UsedNameChecker(Vec<LifetimeAnnotation>);
 impl<'hir> Visitor<'hir> for UsedNameChecker {
     fn visit_generic_param(&mut self, param: &'hir GenericParam<'hir>) -> Self::Result {
-        self.0.push(param.name.ident().name.to_string());
+        self.0.push(param.name.ident().name.to_string().into());
         intravisit::walk_generic_param(self, param)
     }
 }
@@ -318,7 +320,7 @@ struct Collector {
     krate: String,
     file: PathBuf,
     source: Arc<SourceFile>,
-    name: naming::LifetimeNamer,
+    name: LifetimeNamer,
     impl_names: Option<(models::Signature, Vec<models::Step>)>,
     report: FunctionFreshen,
 }
@@ -339,7 +341,7 @@ impl Collector {
         }
     }
     fn fresh(&mut self) -> models::LifetimeAnnotation {
-        let mut name = self.name.fresh();
+        let mut name = self.name.next().unwrap();
         if let Some((signature, steps)) = &mut self.impl_names {
             signature.params.push(name);
             name = signature.params.last().unwrap().clone();
