@@ -2,8 +2,10 @@
 
 pub extern crate rustc_borrowck;
 pub extern crate rustc_driver;
+pub extern crate rustc_errors;
 pub extern crate rustc_hir;
 pub extern crate rustc_interface;
+pub extern crate rustc_lint_defs;
 pub extern crate rustc_middle;
 pub extern crate rustc_session;
 pub extern crate rustc_span;
@@ -11,8 +13,10 @@ pub extern crate rustc_span;
 pub use middle::ty::TyCtxt;
 pub use rustc_borrowck::consumers as borrowck;
 pub use rustc_driver as driver;
+pub use rustc_errors as errors;
 pub use rustc_hir as hir;
 pub use rustc_interface as interface;
+pub use rustc_lint_defs as lint_defs;
 pub use rustc_middle as middle;
 pub use rustc_session as session;
 pub use rustc_span as span;

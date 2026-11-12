@@ -10,6 +10,7 @@ use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
 use bridge::TyCtxt;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
+use bridge::errors::{DiagCtxt, emitter::SilentEmitter};
 use bridge::hir::def_id::LOCAL_CRATE;
 use bridge::interface::interface;
 use bridge::span;
@@ -111,6 +112,15 @@ impl Callbacks for GevatterDriver {
                 tracing::info!("this is a restart; source directory ({path:?}) is cleaned");
             }
             _ => {}
+        }
+
+        if !matches!(self.current_phase, Phase::Verification | Phase::Fallback) {
+            config.psess_created = Some(Box::new(|psess| {
+                *psess = bridge::session::parse::ParseSess::with_dcx(
+                    DiagCtxt::new(Box::new(SilentEmitter)),
+                    psess.clone_source_map(),
+                );
+            }));
         }
 
         if self.current_phase != Phase::Fallback {
