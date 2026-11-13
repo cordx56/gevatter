@@ -1,13 +1,12 @@
-use crate::Simplifier;
+use crate::{Options, Simplifier};
 use models::{LifetimeAnnotation, Signature, SignaturePosition, Slot, Step};
 use std::collections::{BTreeMap, BTreeSet};
 
 impl Simplifier {
     pub fn elide(&mut self) -> &[Step] {
         let sig = &mut self.signature;
-        let elidable = &self.options.introduced;
         let before_length = self.steps.len();
-        let Some((candidate, hidden)) = accepted_candidate(sig, elidable) else {
+        let Some((candidate, hidden)) = accepted_candidate(sig, &self.options) else {
             return &[];
         };
         *sig = candidate;
@@ -129,10 +128,10 @@ fn complete<'a>(a: &'a Signature, b: &'a Signature, renaming: Renaming<'a>) -> b
 
 fn accepted_candidate(
     signature: &Signature,
-    elidable: &BTreeSet<LifetimeAnnotation>,
+    options: &Options,
 ) -> Option<(Signature, Vec<LifetimeAnnotation>)> {
     let free = |lifetime: &LifetimeAnnotation| {
-        elidable.contains(lifetime) && !signature.is_constrained(lifetime)
+        options.introduced.contains(lifetime) && !signature.is_constrained(lifetime)
     };
     let singles: Vec<_> = signature
         .params
@@ -151,7 +150,8 @@ fn accepted_candidate(
         .map(|slot| &slot.lifetime);
     let output = outputs
         .next()
-        .filter(|first| free(first) && outputs.all(|other| other == *first));
+        .filter(|first| free(first) && !options.preferred.contains_key(*first))
+        .filter(|first| outputs.all(|other| other == *first));
     [output, None].into_iter().find_map(|output| {
         let hidden: Vec<_> = signature
             .params

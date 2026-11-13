@@ -19,6 +19,8 @@ pub struct BindingState {
     pub attempt: usize,
     pub original: BTreeMap<FunctionKey, SignatureBinding>,
     pub preserved: BTreeSet<FunctionKey>,
+    #[serde(default)]
+    pub ungeneralized: BTreeSet<FunctionKey>,
 }
 impl BindingState {
     pub fn start_attempt(self, tcx: TyCtxt<'_>, attempt: usize) -> Self {
@@ -30,6 +32,7 @@ impl BindingState {
             attempt,
             original,
             preserved: self.preserved,
+            ungeneralized: self.ungeneralized,
         }
     }
 

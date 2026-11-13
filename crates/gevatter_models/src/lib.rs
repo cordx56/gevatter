@@ -225,6 +225,20 @@ impl std::fmt::Display for FunctionKey {
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
+pub struct Freshening {
+    pub introduced: Vec<LifetimeAnnotation>,
+    #[serde(default)]
+    pub replaced: BTreeMap<LifetimeAnnotation, LifetimeAnnotation>,
+    #[serde(default)]
+    pub generalized: bool,
+}
+impl Freshening {
+    pub fn is_empty(&self) -> bool {
+        self.introduced.is_empty() && !self.generalized
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Binding {

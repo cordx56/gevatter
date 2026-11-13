@@ -14,6 +14,8 @@ pub mod freshen;
 pub mod predicates;
 pub mod resolver;
 pub mod simplify;
+mod text;
+mod usage;
 
 pub use files::TemporaryFileLoader;
 
@@ -37,7 +39,7 @@ pub enum EditError {
     Overlap,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Skipped {
     pub start: usize,
     pub end: usize,

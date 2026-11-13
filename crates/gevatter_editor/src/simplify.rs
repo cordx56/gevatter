@@ -1,20 +1,19 @@
 use crate::collectors::collect_functions;
-use crate::{Edit, TargetFunc, TemporaryFileLoader};
+use crate::{Edit, TargetFunc, TemporaryFileLoader, usage};
 use bridge::span::source_map::FileLoader;
 use bridge::{FromRustc, TyCtxt};
-use models::{FunctionKey, LifetimeAnnotation, Simplification, SkipReason, Step};
+use models::{Freshening, FunctionKey, Simplification, SkipReason, Step};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod extract;
 mod rewrite;
-mod usage;
 mod variance;
 
 use variance::Variances;
 
 #[derive(Clone, Debug)]
 pub struct Touched {
-    pub introduced: BTreeMap<FunctionKey, Vec<LifetimeAnnotation>>,
+    pub freshened: BTreeMap<FunctionKey, Freshening>,
     pub fixed: BTreeSet<String>,
     pub settled: BTreeSet<String>,
     pub preserved: BTreeSet<FunctionKey>,
@@ -36,16 +35,17 @@ pub fn simplify_signatures(tcx: TyCtxt<'_>, touched: &Touched) -> Simplified {
         .filter(|target| target.skipped.is_empty() && !target.is_return_opaque)
         .filter(|target| touched.settled.contains(&target.def_path))
         .filter_map(|target| {
-            let introduced = touched
-                .introduced
+            let untouched = Freshening::default();
+            let freshening = touched
+                .freshened
                 .get(&FunctionKey::from_rustc((tcx, target.def_id)))
-                .map_or(&[][..], Vec::as_slice);
-            let fixed = touched.fixed.contains(&target.def_path);
-            if introduced.is_empty() && !fixed {
+                .unwrap_or(&untouched);
+            let fixed = touched.fixed.contains(&target.def_path) || freshening.generalized;
+            if freshening.introduced.is_empty() && !fixed {
                 return None;
             }
             let (simplification, edits) =
-                match simplify_function(tcx, &target, introduced, fixed, Variances::default()) {
+                match simplify_function(tcx, &target, freshening, fixed, Variances::default()) {
                     Ok((_, edits)) if edits.is_empty() => return None,
                     Ok((steps, edits)) => (Simplification::Simplified { steps }, edits),
                     Err(reason) => (
@@ -68,25 +68,26 @@ pub fn simplify_signatures(tcx: TyCtxt<'_>, touched: &Touched) -> Simplified {
 fn simplify_function<'tcx>(
     tcx: TyCtxt<'tcx>,
     target: &TargetFunc<'tcx>,
-    introduced: &[LifetimeAnnotation],
+    freshening: &Freshening,
     fixed: bool,
     variances: Variances,
 ) -> Result<(Vec<Step>, Vec<Edit>), SkipReason> {
     let extract::Extracted { signature, guarded } = extract::extract(tcx, target, variances)?;
     let usage = usage::lifetime_usage(tcx, target.def_id, target.signature.decl);
     let options = simplify::Options {
-        introduced: introduced.iter().cloned().collect(),
+        introduced: freshening.introduced.iter().cloned().collect(),
         pinned: if fixed {
             BTreeSet::new()
         } else {
             signature
                 .params
                 .iter()
-                .filter(|param| !introduced.contains(param))
+                .filter(|param| !freshening.introduced.contains(param))
                 .cloned()
                 .collect()
         },
         reserved: usage.bound_inside,
+        preferred: freshening.replaced.clone(),
     };
     let simplify::SimplificationResult {
         signature: simplified,

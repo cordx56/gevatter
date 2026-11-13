@@ -1,9 +1,9 @@
 use crate::json;
-use models::{FunctionKey, LifetimeAnnotation};
-use std::collections::BTreeMap;
+use models::{Freshening, FunctionKey};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-pub type Introduced = BTreeMap<FunctionKey, Vec<LifetimeAnnotation>>;
+pub type Introduced = BTreeMap<FunctionKey, Freshening>;
 
 #[derive(Clone, Debug)]
 pub struct IntroducedFile {
@@ -27,5 +27,13 @@ impl IntroducedFile {
         if let Err(e) = json::store(&self.path, introduced) {
             tracing::error!("failed to store introduced names {:?}: {e:?}", self.path);
         }
+    }
+
+    pub fn generalized(&self) -> BTreeSet<FunctionKey> {
+        self.load()
+            .into_iter()
+            .filter(|(_, freshening)| freshening.generalized)
+            .map(|(key, _)| key)
+            .collect()
     }
 }

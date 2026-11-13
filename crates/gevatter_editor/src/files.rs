@@ -98,6 +98,8 @@ fn ensure_mirror(path: &Path) -> io::Result<Option<PathBuf>> {
 
 pub struct TemporaryFileLoader;
 impl TemporaryFileLoader {
+    /// CALL THIS AT LEAST ONCE before using [`TemporaryFileLoader`].
+    /// In most cases in [`bridge::driver::Callbacks::config`].
     pub fn ensure_unit_path(conf: &bridge::interface::Config) -> PathBuf {
         let krate = conf
             .opts

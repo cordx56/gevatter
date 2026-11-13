@@ -1,10 +1,11 @@
 use models::{LifetimeAnnotation, Signature, Step};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub mod contract;
 pub mod elision;
 pub mod relation;
 pub mod rename;
+pub mod restore;
 pub mod substitute;
 
 #[derive(Default, Clone, Debug)]
@@ -12,6 +13,7 @@ pub struct Options {
     pub introduced: BTreeSet<LifetimeAnnotation>,
     pub pinned: BTreeSet<LifetimeAnnotation>,
     pub reserved: BTreeSet<LifetimeAnnotation>,
+    pub preferred: BTreeMap<LifetimeAnnotation, LifetimeAnnotation>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -40,6 +42,7 @@ impl Simplifier {
         self.contract();
         self.substitute();
         self.reconstruct();
+        self.restore();
         self.drop_unused();
         self.elide();
         self.rename();

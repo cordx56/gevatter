@@ -1,20 +1,29 @@
 use super::*;
 use bridge::TyCtxt;
-use models::{FunctionKey, LifetimeAnnotation};
+use models::{Freshening, FunctionKey, LifetimeAnnotation};
 use std::collections::BTreeSet;
 
 pub mod collector;
+mod generalize;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+pub struct Generalization {
+    pub excluded: BTreeSet<FunctionKey>,
+}
+
+#[derive(Clone, Debug)]
 pub struct FunctionFreshen {
     pub key: FunctionKey,
     pub def_path: String,
     pub introduced: Vec<models::LifetimeAnnotation>,
+    pub replaced: BTreeMap<LifetimeAnnotation, LifetimeAnnotation>,
+    pub generalized: bool,
     pub edits: Vec<super::Edit>,
     pub skipped: Vec<Skipped>,
     pub bailed: Vec<models::SkipReason>,
 }
 
+#[derive(Clone, Debug)]
 pub struct ImplFreshen {
     pub def_path: String,
     pub introduced: Vec<models::LifetimeAnnotation>,
@@ -25,15 +34,26 @@ pub struct ImplFreshen {
 #[derive(Default, Debug)]
 pub struct Freshened {
     pub edits: Vec<Edit>,
-    pub introduced: BTreeMap<FunctionKey, Vec<LifetimeAnnotation>>,
+    pub functions: BTreeMap<FunctionKey, Freshening>,
 }
 
-pub fn freshen_annotations(tcx: TyCtxt<'_>, preserved: &BTreeSet<FunctionKey>) -> Freshened {
-    let (funcs, impls) = collector::collect(tcx, preserved);
-    let (introduced, edits): (BTreeMap<_, _>, Vec<_>) = funcs
+pub fn freshen_annotations(
+    tcx: TyCtxt<'_>,
+    preserved: &BTreeSet<FunctionKey>,
+    generalization: Option<&Generalization>,
+) -> Freshened {
+    let (funcs, impls) = collector::collect(tcx, preserved, generalization);
+    let (functions, edits): (BTreeMap<_, _>, Vec<_>) = funcs
         .into_iter()
         .filter(|func| func.bailed.is_empty())
-        .map(|func| ((func.key, func.introduced), func.edits))
+        .map(|func| {
+            let freshening = Freshening {
+                introduced: func.introduced,
+                replaced: func.replaced,
+                generalized: func.generalized,
+            };
+            ((func.key, freshening), func.edits)
+        })
         .unzip();
     Freshened {
         edits: edits
@@ -41,9 +61,9 @@ pub fn freshen_annotations(tcx: TyCtxt<'_>, preserved: &BTreeSet<FunctionKey>) -
             .chain(impls.into_iter().map(|imp| imp.edits))
             .flatten()
             .collect(),
-        introduced: introduced
+        functions: functions
             .into_iter()
-            .filter(|(_, names)| !names.is_empty())
+            .filter(|(_, freshening)| !freshening.is_empty())
             .collect(),
     }
 }

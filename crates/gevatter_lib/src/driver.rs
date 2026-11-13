@@ -1,6 +1,7 @@
 use editor::TemporaryFileLoader;
+use editor::freshen::Generalization;
 use editor::simplify::Touched;
-use models::{CrateReport, FunctionStatus};
+use models::{CrateReport, FunctionKey, FunctionStatus};
 use std::collections::BTreeSet;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
@@ -8,12 +9,12 @@ use std::process::{Command, ExitCode};
 use crate::binding::{self, BindingFile, BindingState};
 use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
-use bridge::TyCtxt;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
 use bridge::errors::{DiagCtxt, emitter::SilentEmitter};
 use bridge::hir::def_id::LOCAL_CRATE;
 use bridge::interface::interface;
 use bridge::span;
+use bridge::{FromRustc, TyCtxt};
 
 pub mod phase;
 
@@ -42,6 +43,7 @@ impl GevatterDriver {
             verified: None,
         }
     }
+    /// Run the compiler
     pub fn run(mut self, args: &[String]) -> ExitCode {
         if catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok() {
             return ExitCode::SUCCESS;
@@ -55,14 +57,45 @@ impl GevatterDriver {
                 );
                 self.revert_simplification(&file, report);
             } else {
-                tracing::warn!("compilation failed after verification; fall back to the original");
+                tracing::warn!("compilation failed after verification");
                 file.store(&report);
-                if let Err(e) = self.re_exec(Phase::Fallback) {
-                    tracing::error!("process exec error: {e:?}");
-                }
+                self.fall_back();
             }
+        } else if self.current_phase != Phase::Fallback {
+            tracing::warn!("phase {} is aborted", self.current_phase);
+            self.fall_back();
         }
         ExitCode::FAILURE
+    }
+
+    fn fall_back(&self) {
+        let generalized = IntroducedFile::current().generalized();
+        if generalized.is_empty() {
+            tracing::warn!("fall back to the original");
+            if let Err(e) = self.re_exec(Phase::Fallback) {
+                tracing::error!("process exec error: {e:?}");
+            }
+        } else {
+            tracing::warn!("retry without generalization");
+            let bindings = BindingFile::current();
+            self.restart_without_generalization(&bindings, bindings.load(), generalized);
+        }
+    }
+    fn restart_without_generalization(
+        &self,
+        bindings: &BindingFile,
+        mut state: BindingState,
+        functions: BTreeSet<FunctionKey>,
+    ) {
+        tracing::info!(
+            "{} functions keep their written lifetimes; restart",
+            functions.len(),
+        );
+        state.ungeneralized.extend(functions);
+        bindings.store(&state);
+        if let Err(e) = self.re_exec(Phase::AnnotationFreshen(state.attempt + 1)) {
+            tracing::error!("process exec error: {e:?}");
+        }
     }
     fn revert_simplification(&self, file: &ReportFile, mut report: CrateReport) {
         let next_phase = match TemporaryFileLoader::restore_sources() {
@@ -115,6 +148,7 @@ impl Callbacks for GevatterDriver {
         }
 
         if !matches!(self.current_phase, Phase::Verification | Phase::Fallback) {
+            // ignore all diags on other than verification or fallback phase
             config.psess_created = Some(Box::new(|psess| {
                 *psess = bridge::session::parse::ParseSess::with_dcx(
                     DiagCtxt::new(Box::new(SilentEmitter)),
@@ -149,8 +183,15 @@ impl Callbacks for GevatterDriver {
                 }
                 .start_attempt(tcx, attempt);
                 bindings.store(&state);
-                let freshened = editor::freshen::freshen_annotations(tcx, &state.preserved);
-                IntroducedFile::current().store(&freshened.introduced);
+                let generalization = phase::GENERALIZE.then_some(Generalization {
+                    excluded: state.ungeneralized,
+                });
+                let freshened = editor::freshen::freshen_annotations(
+                    tcx,
+                    &state.preserved,
+                    generalization.as_ref(),
+                );
+                IntroducedFile::current().store(&freshened.functions);
                 if editor::apply_to_file(&freshened.edits).is_err() {
                     tracing::warn!("failed to edit file; re-exec for next phase");
                 } else {
@@ -218,7 +259,7 @@ impl Callbacks for GevatterDriver {
                 let file = ReportFile::of(tcx);
                 let mut report = file.load();
                 let state = BindingFile::current().load();
-                let introduced = IntroducedFile::current().load();
+                let freshened = IntroducedFile::current().load();
                 let fixed: BTreeSet<_> = report
                     .functions
                     .iter()
@@ -226,7 +267,7 @@ impl Callbacks for GevatterDriver {
                     .map(|function| function.def_path.clone())
                     .collect();
                 let touched = Touched {
-                    introduced,
+                    freshened,
                     fixed,
                     settled: report.settled(),
                     preserved: state.preserved,
@@ -286,8 +327,31 @@ impl Callbacks for GevatterDriver {
                     self.revert_simplification(&file, report);
                     return bridge::driver::Compilation::Stop;
                 }
-                let unpreserved = state.unpreserved(tcx, &changes);
-                if *binding::PRESERVE_BINDING && !unpreserved.is_empty() {
+                let generalized = IntroducedFile::current().generalized();
+                let unfixable: BTreeSet<_> = report
+                    .functions
+                    .iter()
+                    .filter(|function| matches!(function.status, FunctionStatus::Unfixable(_)))
+                    .map(|function| function.def_path.as_str())
+                    .collect();
+                let unpreserved = if *binding::PRESERVE_BINDING {
+                    state.unpreserved(tcx, &changes)
+                } else {
+                    BTreeSet::new()
+                };
+                let blamed: BTreeSet<_> = changes
+                    .keys()
+                    .filter(|def_id| unfixable.contains(tcx.def_path_str(**def_id).as_str()))
+                    .map(|def_id| FunctionKey::from_rustc((tcx, *def_id)))
+                    .chain(unpreserved.iter().cloned())
+                    .filter(|key| generalized.contains(key))
+                    .collect();
+                if !blamed.is_empty() {
+                    tracing::warn!("generalized functions are rejected; retry with their names");
+                    self.restart_without_generalization(&bindings, state, blamed);
+                    return bridge::driver::Compilation::Stop;
+                }
+                if !unpreserved.is_empty() {
                     tracing::info!(
                         "{} functions changed binding; restart with their originals",
                         unpreserved.len(),
@@ -303,10 +367,8 @@ impl Callbacks for GevatterDriver {
                     self.verified = Some(file);
                     return bridge::driver::Compilation::Continue;
                 }
-                tracing::warn!("verification failed; fall back to the original");
-                if let Err(e) = self.re_exec(Phase::Fallback) {
-                    tracing::error!("process exec error: {e:?}");
-                }
+                tracing::warn!("verification failed");
+                self.fall_back();
                 bridge::driver::Compilation::Stop
             }
             Phase::Fallback => bridge::driver::Compilation::Continue,

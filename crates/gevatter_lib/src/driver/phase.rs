@@ -9,13 +9,21 @@ pub static MAX_FIX_ROUNDS: LazyLock<usize> = LazyLock::new(|| {
         .unwrap_or(10)
 });
 
+/// Simplify is enabled by default
 pub static SIMPLIFY: LazyLock<bool> = LazyLock::new(|| {
     !env::var("GEVATTER_SIMPLIFY").is_ok_and(|v| matches!(v.as_str(), "0" | "false"))
 });
 
+/// Generalization is disabled by default
+pub static GENERALIZE: LazyLock<bool> = LazyLock::new(|| {
+    env::var("GEVATTER_GENERALIZE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
+});
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
+    /// AnnotationFreshen has a attempt count
     AnnotationFreshen(usize),
+    /// AnalyzeAndFix has a round count
     AnalyzeAndFix(usize),
     Simplify,
     Verification,

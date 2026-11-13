@@ -7,12 +7,13 @@ use bridge::hir::{
 };
 use bridge::span::{BytePos, FileName, Span};
 use models::{FunctionKey, LifetimeNamer, SkipReason};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 pub fn collect(
     tcx: TyCtxt<'_>,
     preserved: &BTreeSet<FunctionKey>,
+    generalization: Option<&Generalization>,
 ) -> (Vec<FunctionFreshen>, Vec<ImplFreshen>) {
     let krate = tcx.crate_name(hir::def_id::LOCAL_CRATE).to_string();
     let impls = collect_impls(tcx);
@@ -26,11 +27,28 @@ pub fn collect(
             key: FunctionKey::from_rustc((tcx, target.def_id)),
             def_path: target.def_path,
             introduced: Vec::new(),
+            replaced: BTreeMap::new(),
+            generalized: false,
             edits: Vec::new(),
             skipped: Vec::new(),
             bailed,
         };
         if report.bailed.is_empty() {
+            let plan = generalization
+                .filter(|generalization| !generalization.excluded.contains(&report.key))
+                .and_then(|_| TemporaryFileLoader.read_file(&target.file).ok())
+                .and_then(|text| {
+                    generalize::plan(
+                        tcx,
+                        target.def_id,
+                        target.generics,
+                        target.signature.decl,
+                        &target.source,
+                        &text,
+                    )
+                });
+            report.generalized = plan.is_some();
+            let generalize::Plan { split, removals } = plan.unwrap_or_default();
             let existing = target
                 .generics
                 .params
@@ -55,9 +73,19 @@ pub fn collect(
                 file: target.file.clone(),
                 name: LifetimeNamer::new(existing),
                 impl_names: None,
+                split,
                 report,
             };
             collector.visit_fn_decl(target.signature.decl);
+            collector
+                .report
+                .edits
+                .extend(removals.into_iter().map(|span| Edit {
+                    krate: krate.clone(),
+                    file: target.file.clone(),
+                    span,
+                    replace_with: String::new(),
+                }));
 
             for predicate in target.generics.predicates {
                 if let hir::WherePredicateKind::BoundPredicate(bound) = predicate.kind
@@ -80,8 +108,11 @@ pub fn collect(
                     .map(|l| l.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                let (span, replace_with) = match target.generics.span_for_param_suggestion() {
-                    Some(span) => (span, format!(", {names}")),
+                let (span, replace_with) = match last_param_end(target.generics) {
+                    Some(end) => (
+                        target.generics.span.with_lo(end).shrink_to_lo(),
+                        format!(", {names}"),
+                    ),
                     None if !target.generics.span.is_empty() => (
                         target
                             .generics
@@ -145,6 +176,8 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             key: FunctionKey::from_rustc((tcx, owner.def_id)),
             def_path: tcx.def_path_str(owner.def_id.to_def_id()),
             introduced: Vec::new(),
+            replaced: BTreeMap::new(),
+            generalized: false,
             edits: Vec::new(),
             skipped: Vec::new(),
             bailed: Vec::new(),
@@ -173,6 +206,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
                 },
                 Vec::new(),
             )),
+            split: HashSet::new(),
             report,
         };
         if let Some(trait_ref) = imp.of_trait {
@@ -215,20 +249,7 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
             .join(", ");
         let (insert, replace) = if imp.generics.span.is_empty() {
             (imp.generics.span, format!("<{names}>"))
-        } else if let Some(last_param) = imp
-            .generics
-            .params
-            .iter()
-            .rfind(|p| imp.generics.span.contains(p.span))
-        {
-            // check trailing comma, comments, and so on
-            let end = imp
-                .generics
-                .predicates
-                .iter()
-                .filter(|p| !p.kind.in_where_clause() && imp.generics.span.contains(p.span))
-                .map(|p| p.span.hi())
-                .fold(last_param.span.hi(), std::cmp::max);
+        } else if let Some(end) = last_param_end(imp.generics) {
             (
                 imp.generics.span.with_lo(end).shrink_to_lo(),
                 format!(", {names}"),
@@ -293,6 +314,21 @@ pub fn collect_impls(tcx: TyCtxt<'_>) -> HashMap<LocalDefId, ImplFreshen> {
     impls
 }
 
+fn last_param_end(generics: &hir::Generics<'_>) -> Option<BytePos> {
+    let last_param = generics
+        .params
+        .iter()
+        .rfind(|p| generics.span.contains(p.span))?;
+    // check trailing comma, comments, and so on
+    let end = generics
+        .predicates
+        .iter()
+        .filter(|p| !p.kind.in_where_clause() && generics.span.contains(p.span))
+        .map(|p| p.span.hi())
+        .fold(last_param.span.hi(), std::cmp::max);
+    Some(end)
+}
+
 struct UsedNameChecker(Vec<LifetimeAnnotation>);
 impl<'hir> Visitor<'hir> for UsedNameChecker {
     fn visit_generic_param(&mut self, param: &'hir GenericParam<'hir>) -> Self::Result {
@@ -318,6 +354,7 @@ struct Collector {
     source: Arc<SourceFile>,
     name: LifetimeNamer,
     impl_names: Option<(models::Signature, Vec<models::Step>)>,
+    split: HashSet<LocalDefId>,
     report: FunctionFreshen,
 }
 impl Collector {
@@ -419,6 +456,15 @@ impl<'hir> Visitor<'hir> for Collector {
             let name = self.fresh();
             let (span, replace) = lifetime.suggestion(&name.to_string());
             self.push_edit(span, replace);
+        } else if let hir::LifetimeKind::Param(id) = lifetime.kind
+            && self.split.contains(&id)
+        {
+            let name = self.fresh();
+            self.report.replaced.insert(
+                name.clone(),
+                LifetimeAnnotation::from(lifetime.ident.name.as_str()),
+            );
+            self.push_edit(lifetime.ident.span, name.to_string());
         }
     }
 }
