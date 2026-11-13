@@ -70,6 +70,7 @@ name = "gevatter_driver"
 version = "0.1.0"
 dependencies = [
  "gevatter_lib",
+ "tracing",
  "tracing-subscriber",
 ]
 

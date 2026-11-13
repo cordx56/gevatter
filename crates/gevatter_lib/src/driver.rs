@@ -20,13 +20,20 @@ pub mod phase;
 
 use phase::Phase;
 
-pub fn run(args: &[String], callbacks: &mut (dyn Callbacks + Send)) -> ExitCode {
-    catch_with_exit_code(|| {
-        compiler_entrypoint(args, callbacks);
-    })
+pub struct DefaultRustc {
+    args: Vec<String>,
 }
-
-pub struct DefaultRustc;
+impl DefaultRustc {
+    pub fn new(args: Vec<String>) -> Self {
+        Self { args }
+    }
+    pub fn run(mut self) -> ExitCode {
+        let args = &std::mem::take(&mut self.args);
+        catch_with_exit_code(|| {
+            compiler_entrypoint(args, &mut self);
+        })
+    }
+}
 impl Callbacks for DefaultRustc {}
 
 pub struct GevatterDriver {
@@ -35,15 +42,17 @@ pub struct GevatterDriver {
     verified: Option<ReportFile>,
 }
 impl GevatterDriver {
-    pub fn new(args: &[String]) -> Self {
+    /// Pass original arguments for this function;
+    /// this args are used in re-exec for next phase.
+    pub fn new(original_args: Vec<String>) -> Self {
         let current_phase = Phase::current_phase().unwrap_or(Phase::AnnotationFreshen(0));
         Self {
-            args: args.to_vec(),
+            args: original_args,
             current_phase,
             verified: None,
         }
     }
-    /// Run the compiler
+    /// Run the compiler; pass edited arguments for passing the compiler (if needed)
     pub fn run(mut self, args: &[String]) -> ExitCode {
         if catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok() {
             return ExitCode::SUCCESS;

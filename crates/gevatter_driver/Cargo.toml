@@ -9,4 +9,5 @@ rustc_private = true
 [dependencies]
 gevatter_lib = { path = "../gevatter_lib" }
 
+tracing.workspace = true
 tracing-subscriber.workspace = true

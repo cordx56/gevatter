@@ -24,14 +24,17 @@ fn is_passthrough(args: &[String]) -> bool {
 
 pub fn run_compiler() -> ExitCode {
     let original_args: Vec<_> = env::args().collect();
+
+    // this is intended to check that the current compilation is a crate in a workspace
+    // that is a current target
     if original_args.first() != original_args.get(1) {
-        return driver::run(&original_args, &mut driver::DefaultRustc);
+        return driver::DefaultRustc::new(original_args).run();
     }
 
     let args: Vec<String> = original_args.iter().skip(1).cloned().collect();
     if is_passthrough(&args) {
-        return driver::run(&args, &mut driver::DefaultRustc);
+        return driver::DefaultRustc::new(args).run();
     }
 
-    driver::GevatterDriver::new(&original_args).run(&args)
+    driver::GevatterDriver::new(original_args).run(&args)
 }
