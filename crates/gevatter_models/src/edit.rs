@@ -22,6 +22,17 @@ pub struct ItemHeader {
 
 pub type Headers = BTreeMap<FunctionKey, ItemHeader>;
 
+/// Relation about permissive lifetime annotations;
+/// more general or not
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Generality {
+    Equivalent,
+    MoreGeneral,
+    LessGeneral,
+    Incomparable,
+}
+
 /// Simple data structure for describing edits;
 /// Note: internal edits are mentioned in `gevatter_editor` crate;
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -40,6 +51,8 @@ pub struct HeaderEdit {
     pub replaced: String,
     pub replacements: Vec<Replacement>,
     pub parent: Option<FunctionKey>,
+    #[serde(default)]
+    pub generality: Option<Generality>,
 }
 
 pub type HeaderEdits = BTreeMap<FunctionKey, HeaderEdit>;

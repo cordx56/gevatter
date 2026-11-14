@@ -19,6 +19,10 @@ pub static GENERALIZE: LazyLock<bool> = LazyLock::new(|| {
     env::var("GEVATTER_GENERALIZE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
 });
 
+/// Lint mode; Lint is enabled by default
+pub static LINT: LazyLock<bool> =
+    LazyLock::new(|| !env::var("GEVATTER_LINT").is_ok_and(|v| matches!(v.as_str(), "0" | "false")));
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
     /// AnnotationFreshen has a attempt count
@@ -28,6 +32,7 @@ pub enum Phase {
     Simplify,
     Verification,
     Fallback,
+    Lint,
 }
 impl Phase {
     pub fn parse_str(s: &str) -> Option<Self> {
@@ -39,6 +44,7 @@ impl Phase {
                 "3" => Some(Phase::Simplify),
                 "4" => Some(Phase::Verification),
                 "5" => Some(Phase::Fallback),
+                "6" => Some(Phase::Lint),
                 _ => None,
             },
             2 => match split[0] {
@@ -63,7 +69,7 @@ impl Phase {
             Phase::AnalyzeAndFix(_) if *SIMPLIFY => Some(Phase::Simplify),
             Phase::AnalyzeAndFix(_) | Phase::Simplify => Some(Phase::Verification),
             Phase::Verification => None,
-            Phase::Fallback => None,
+            Phase::Fallback | Phase::Lint => None,
         }
     }
     /// This returns None if the current phase is not "analyze and fix",
@@ -85,6 +91,7 @@ impl std::fmt::Display for Phase {
             Phase::Simplify => f.write_str("3"),
             Phase::Verification => f.write_str("4"),
             Phase::Fallback => f.write_str("5"),
+            Phase::Lint => f.write_str("6"),
         }
     }
 }

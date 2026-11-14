@@ -1,9 +1,46 @@
+use crate::replacements;
 use bridge::hir::{BodyId, ImplItemKind, ItemKind, Node, def::DefKind, def_id::LocalDefId};
 use bridge::span::{FileName, Span, source_map::FileLoader};
 use bridge::{FromRustc, TyCtxt};
-use models::{FunctionKey, HeaderKind, Headers, ItemHeader};
-use std::collections::HashMap;
+use models::{FunctionKey, Generality, HeaderEdit, HeaderEdits, HeaderKind, Headers, ItemHeader};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{self, PathBuf};
+
+pub fn header_edits(
+    original: &Headers,
+    current: &Headers,
+    generalities: &BTreeMap<FunctionKey, Generality>,
+) -> HeaderEdits {
+    let changed = |key: &FunctionKey| {
+        original
+            .get(key)
+            .zip(current.get(key))
+            .filter(|(from, to)| from.text != to.text)
+    };
+    let edits: HeaderEdits = original
+        .keys()
+        .filter_map(|key| {
+            let (from, to) = changed(key)?;
+            let edit = HeaderEdit {
+                kind: from.kind,
+                def_path: to.def_path.clone(),
+                file: from.file.clone(),
+                span: from.span,
+                original: from.text.clone(),
+                replaced: to.text.clone(),
+                replacements: replacements(&from.text, &to.text, from.span.lo),
+                parent: from
+                    .parent
+                    .clone()
+                    .filter(|parent| changed(parent).is_some()),
+                generality: generalities.get(key).copied(),
+            };
+            Some((key.clone(), edit))
+        })
+        .collect();
+    tracing::info!("{} of {} headers are edited", edits.len(), original.len());
+    edits
+}
 
 fn header_span(tcx: TyCtxt<'_>, def_id: LocalDefId) -> Option<(HeaderKind, Span)> {
     let function = |signature: Span, body: BodyId| {

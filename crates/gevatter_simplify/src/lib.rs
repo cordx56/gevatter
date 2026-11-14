@@ -6,6 +6,7 @@ pub mod elision;
 pub mod relation;
 pub mod rename;
 pub mod restore;
+pub mod sat;
 pub mod substitute;
 
 #[derive(Default, Clone, Debug)]

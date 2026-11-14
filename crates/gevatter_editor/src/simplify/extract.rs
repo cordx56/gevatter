@@ -2,7 +2,7 @@ use super::variance::Variances;
 use crate::TargetFunc;
 use bridge::hir::{
     self,
-    def_id::LocalDefId,
+    def_id::{DefId, LocalDefId},
     intravisit::{self, Visitor},
 };
 use bridge::middle::middle::resolve_bound_vars::ResolvedArg;
@@ -23,19 +23,38 @@ pub struct Extracted {
     pub guarded: Vec<(usize, SkipReason)>,
 }
 
-pub fn named_lifetimes(generics: &hir::Generics<'_>) -> Vec<(LocalDefId, LifetimeAnnotation)> {
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Anonymous {
+    Rejected,
+    Numbered,
+}
+
+fn lifetimes(
+    generics: &hir::Generics<'_>,
+    anonymous: Anonymous,
+    scope: &str,
+) -> Vec<(LocalDefId, LifetimeAnnotation)> {
     generics
         .params
         .iter()
         .filter(|param| matches!(param.kind, hir::GenericParamKind::Lifetime { .. }))
-        .map(|param| {
-            (
-                param.def_id,
-                LifetimeAnnotation::from(param.name.ident().name.as_str()),
-            )
+        .enumerate()
+        .filter_map(|(index, param)| {
+            let name = LifetimeAnnotation::from(param.name.ident().name.as_str());
+            match (name.is_anonymous(), anonymous) {
+                (false, _) => Some((param.def_id, name)),
+                (true, Anonymous::Numbered) => Some((
+                    param.def_id,
+                    LifetimeAnnotation::from(format!("_{scope}#{index}")),
+                )),
+                (true, Anonymous::Rejected) => None,
+            }
         })
-        .filter(|(_, name)| !name.is_anonymous())
         .collect()
+}
+
+pub fn named_lifetimes(generics: &hir::Generics<'_>) -> Vec<(LocalDefId, LifetimeAnnotation)> {
+    lifetimes(generics, Anonymous::Rejected, "")
 }
 
 fn written_relations(generics: &hir::Generics<'_>) -> Vec<LifetimeRelation> {
@@ -62,6 +81,7 @@ pub fn extract<'tcx>(
     tcx: TyCtxt<'tcx>,
     target: &TargetFunc<'tcx>,
     variances: Variances,
+    anonymous: Anonymous,
 ) -> Result<Extracted, SkipReason> {
     if target
         .generics
@@ -71,10 +91,10 @@ pub fn extract<'tcx>(
     {
         return Err(SkipReason::BoundPredicate);
     }
-    let params = named_lifetimes(target.generics);
+    let params = lifetimes(target.generics, anonymous, "fn");
     let fixed = target
         .parent_generics
-        .map(named_lifetimes)
+        .map(|generics| lifetimes(generics, anonymous, "impl"))
         .unwrap_or_default();
     let own: HashMap<_, _> = params.iter().chain(&fixed).cloned().collect();
     let decl = target.signature.decl;
@@ -149,7 +169,7 @@ pub fn extract<'tcx>(
     }
     let universe = signature.universe();
     signature.known.extend(
-        implied_relations(tcx, target.def_id)?
+        implied_relations(tcx, target.def_id, &own)?
             .into_iter()
             .filter(|relation| {
                 universe.contains(&relation.longer) && universe.contains(&relation.shorter)
@@ -161,14 +181,15 @@ pub fn extract<'tcx>(
 fn implied_relations(
     tcx: TyCtxt<'_>,
     def_id: LocalDefId,
+    own: &HashMap<LocalDefId, LifetimeAnnotation>,
 ) -> Result<Vec<LifetimeRelation>, SkipReason> {
+    let generics = tcx.generics_of(def_id);
+    let declared = |id: DefId| id.as_local().and_then(|id| own.get(&id)).cloned();
     let name = |region: ty::Region<'_>| match region.kind() {
         ty::ReStatic => Some(LifetimeAnnotation::static_lifetime()),
-        ty::ReEarlyParam(param) => Some(LifetimeAnnotation::from(param.name.as_str())),
+        ty::ReEarlyParam(param) => declared(generics.region_param(param, tcx).def_id),
         ty::ReLateParam(param) => match param.kind {
-            ty::LateParamRegionKind::Named(id) => {
-                Some(LifetimeAnnotation::from(tcx.item_name(id).as_str()))
-            }
+            ty::LateParamRegionKind::Named(id) => declared(id),
             _ => None,
         },
         _ => None,

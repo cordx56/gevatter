@@ -2,7 +2,8 @@ use crate::{LifetimeAnnotation, LifetimeRelation, Span};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum SignaturePosition {
     /// represents nth param; self is 0.
     Params(usize),
@@ -14,7 +15,8 @@ impl SignaturePosition {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum SlotSyntax {
     /// `&'a T`. Elided simply by removing the token: `&T`.
     Reference,
@@ -24,7 +26,8 @@ pub enum SlotSyntax {
 }
 
 /// Variance of a lifetime occurrence, seen from the caller of the function.
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
 pub enum Polarity {
     Pos,
     Neg,
@@ -43,7 +46,7 @@ impl Polarity {
 }
 
 /// One occurrence of a lifetime in the parameter types or the return type.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct Slot {
     pub lifetime: LifetimeAnnotation,
     pub position: SignaturePosition,
@@ -54,7 +57,7 @@ pub struct Slot {
 }
 
 /// Represents function/method's signature
-#[derive(PartialEq, Eq, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
 pub struct Signature {
     /// lifetime annotations introduced on this function
     pub params: Vec<LifetimeAnnotation>,

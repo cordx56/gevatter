@@ -7,7 +7,7 @@ use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
 use crate::binding::{self, BindingFile, BindingState};
-use crate::edits::{EditsFile, HeadersFile};
+use crate::edits::{EditsFile, HeadersFile, SignaturesFile};
 use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
@@ -56,6 +56,12 @@ impl GevatterDriver {
     /// Run the compiler; pass edited arguments for passing the compiler (if needed)
     pub fn run(mut self, args: &[String]) -> ExitCode {
         if catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok() {
+            if self.verified.is_some() && *phase::LINT {
+                tracing::info!("edited sources are compiled; re-exec for lints");
+                if let Err(e) = self.re_exec(Phase::Lint) {
+                    tracing::error!("process exec error: {e:?}");
+                }
+            }
             return ExitCode::SUCCESS;
         }
         if let Some(file) = self.verified.take() {
@@ -71,7 +77,7 @@ impl GevatterDriver {
                 file.store(&report);
                 self.fall_back();
             }
-        } else if self.current_phase != Phase::Fallback {
+        } else if !matches!(self.current_phase, Phase::Fallback | Phase::Lint) {
             tracing::warn!("phase {} is aborted", self.current_phase);
             self.fall_back();
         }
@@ -158,7 +164,19 @@ impl Callbacks for GevatterDriver {
             _ => {}
         }
 
-        if !matches!(self.current_phase, Phase::Verification | Phase::Fallback) {
+        config.register_lints = Some(Box::new(|_, store| lint::register_lints(store)));
+        config
+            .opts
+            .unstable_opts
+            .crate_attr
+            .extend(lint::crate_attributes());
+
+        let reports = match self.current_phase {
+            Phase::Fallback | Phase::Lint => true,
+            Phase::Verification => !*phase::LINT,
+            _ => false,
+        };
+        if !reports {
             // ignore all diags on other than verification or fallback phase
             config.psess_created = Some(Box::new(|psess| {
                 *psess = bridge::session::parse::ParseSess::with_dcx(
@@ -168,7 +186,7 @@ impl Callbacks for GevatterDriver {
             }));
         }
 
-        if self.current_phase != Phase::Fallback {
+        if !matches!(self.current_phase, Phase::Fallback | Phase::Lint) {
             config.file_loader = Some(Box::new(TemporaryFileLoader));
         }
     }
@@ -195,6 +213,7 @@ impl Callbacks for GevatterDriver {
                 .start_attempt(tcx, attempt);
                 bindings.store(&state);
                 HeadersFile::current().store(&lint::headers(tcx, &TemporaryFileLoader));
+                SignaturesFile::current().store(&editor::simplify::resolved_signatures(tcx));
                 let generalization = phase::GENERALIZE.then_some(Generalization {
                     excluded: state.ungeneralized,
                 });
@@ -378,7 +397,20 @@ impl Callbacks for GevatterDriver {
                 if report.verified {
                     let original = HeadersFile::current().load();
                     let current = lint::headers(tcx, &TemporaryFileLoader);
-                    EditsFile::current().store(&lint::header_edits(&original, &current));
+                    let generalities = editor::simplify::generalities(
+                        &SignaturesFile::current().load(),
+                        &editor::simplify::resolved_signatures(tcx),
+                    );
+
+                    let edits = lint::header_edits(&original, &current, &generalities);
+                    EditsFile::current().store(&edits);
+                    if edits.is_empty() && *phase::LINT {
+                        tracing::info!("nothing is edited; re-exec for the original");
+                        if let Err(e) = self.re_exec(Phase::Lint) {
+                            tracing::error!("process exec error: {e:?}");
+                        }
+                        return bridge::driver::Compilation::Stop;
+                    }
                     self.verified = Some(file);
                     return bridge::driver::Compilation::Continue;
                 }
@@ -387,6 +419,10 @@ impl Callbacks for GevatterDriver {
                 bridge::driver::Compilation::Stop
             }
             Phase::Fallback => bridge::driver::Compilation::Continue,
+            Phase::Lint => {
+                lint::emit_lints(tcx, &EditsFile::current().load());
+                bridge::driver::Compilation::Continue
+            }
         }
     }
 }

@@ -45,6 +45,7 @@ fn unit_out_dir() -> PathBuf {
         .join("gevatter")
         .join(UNIT.get().expect("temporary file path is not initialized"))
 }
+/// Returns the path of output dir for edited files
 pub fn edit_out_dir() -> PathBuf {
     unit_out_dir().join("source")
 }
@@ -59,6 +60,9 @@ pub fn introduced_path() -> PathBuf {
 }
 pub fn headers_path() -> PathBuf {
     unit_out_dir().join("headers.json")
+}
+pub fn signatures_path() -> PathBuf {
+    unit_out_dir().join("signatures.json")
 }
 pub fn edits_path() -> PathBuf {
     unit_out_dir().join("edits.json")

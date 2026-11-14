@@ -1,14 +1,16 @@
 use crate::collectors::collect_functions;
 use crate::{Edit, TargetFunc, TemporaryFileLoader, usage};
+use bridge::hir::def::DefKind;
 use bridge::span::source_map::FileLoader;
 use bridge::{FromRustc, TyCtxt};
-use models::{Freshening, FunctionKey, Simplification, SkipReason, Step};
+use models::{Freshening, FunctionKey, Generality, Signature, Simplification, SkipReason, Step};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod extract;
 mod rewrite;
 mod variance;
 
+use extract::Anonymous;
 use variance::Variances;
 
 #[derive(Clone, Debug)]
@@ -72,7 +74,8 @@ fn simplify_function<'tcx>(
     fixed: bool,
     variances: Variances,
 ) -> Result<(Vec<Step>, Vec<Edit>), SkipReason> {
-    let extract::Extracted { signature, guarded } = extract::extract(tcx, target, variances)?;
+    let extract::Extracted { signature, guarded } =
+        extract::extract(tcx, target, variances, Anonymous::Rejected)?;
     let usage = usage::lifetime_usage(tcx, target.def_id, target.signature.decl);
     let options = simplify::Options {
         introduced: freshening.introduced.iter().cloned().collect(),
@@ -114,4 +117,48 @@ fn simplify_function<'tcx>(
         rewrite::rewrite(target, &text, &signature, &simplified)
     };
     Ok((steps, edits))
+}
+
+pub fn resolved_signatures(tcx: TyCtxt<'_>) -> BTreeMap<FunctionKey, Signature> {
+    let is_well_formed = |target: &TargetFunc<'_>| {
+        [target.def_id, tcx.local_parent(target.def_id)]
+            .into_iter()
+            .filter(|def_id| !matches!(tcx.def_kind(*def_id), DefKind::Mod))
+            .all(|def_id| tcx.check_well_formed(def_id).is_ok())
+    };
+    let is_comparable = |target: &TargetFunc<'_>| {
+        !target.is_return_opaque
+            && target
+                .skipped
+                .iter()
+                .all(|reason| matches!(reason, SkipReason::UnsafeBody | SkipReason::ReadOnlyFile))
+    };
+    collect_functions(tcx, &BTreeSet::new())
+        .into_iter()
+        .filter(is_comparable)
+        .filter(is_well_formed)
+        .filter_map(|target| {
+            let extracted =
+                extract::extract(tcx, &target, Variances::default(), Anonymous::Numbered)
+                    .inspect_err(|reason| tracing::debug!("{}: {reason:?}", target.def_path))
+                    .ok()?;
+            Some((
+                FunctionKey::from_rustc((tcx, target.def_id)),
+                extracted.signature,
+            ))
+        })
+        .collect()
+}
+
+pub fn generalities(
+    original: &BTreeMap<FunctionKey, Signature>,
+    current: &BTreeMap<FunctionKey, Signature>,
+) -> BTreeMap<FunctionKey, Generality> {
+    original
+        .iter()
+        .filter_map(|(key, original)| {
+            let generality = simplify::sat::classify(original, current.get(key)?)?;
+            Some((key.clone(), generality))
+        })
+        .collect()
 }
