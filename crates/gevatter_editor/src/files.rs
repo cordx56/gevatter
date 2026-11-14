@@ -57,6 +57,12 @@ pub fn binding_path() -> PathBuf {
 pub fn introduced_path() -> PathBuf {
     unit_out_dir().join("introduced.json")
 }
+pub fn headers_path() -> PathBuf {
+    unit_out_dir().join("headers.json")
+}
+pub fn edits_path() -> PathBuf {
+    unit_out_dir().join("edits.json")
+}
 fn snapshot_dir() -> PathBuf {
     unit_out_dir().join("unsimplified")
 }

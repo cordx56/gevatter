@@ -1,12 +1,13 @@
 use editor::TemporaryFileLoader;
 use editor::freshen::Generalization;
 use editor::simplify::Touched;
-use models::{CrateReport, FunctionKey, FunctionStatus};
+use models::{CrateReport, FunctionKey, FunctionStatus, HeaderEdits};
 use std::collections::BTreeSet;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
 use crate::binding::{self, BindingFile, BindingState};
+use crate::edits::{EditsFile, HeadersFile};
 use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
@@ -153,6 +154,7 @@ impl Callbacks for GevatterDriver {
                 let path = TemporaryFileLoader::ensure_source_refresh();
                 tracing::info!("this is a restart; source directory ({path:?}) is cleaned");
             }
+            Phase::Fallback => EditsFile::current().store(&HeaderEdits::default()),
             _ => {}
         }
 
@@ -192,6 +194,7 @@ impl Callbacks for GevatterDriver {
                 }
                 .start_attempt(tcx, attempt);
                 bindings.store(&state);
+                HeadersFile::current().store(&lint::headers(tcx, &TemporaryFileLoader));
                 let generalization = phase::GENERALIZE.then_some(Generalization {
                     excluded: state.ungeneralized,
                 });
@@ -373,6 +376,9 @@ impl Callbacks for GevatterDriver {
                     return bridge::driver::Compilation::Stop;
                 }
                 if report.verified {
+                    let original = HeadersFile::current().load();
+                    let current = lint::headers(tcx, &TemporaryFileLoader);
+                    EditsFile::current().store(&lint::header_edits(&original, &current));
                     self.verified = Some(file);
                     return bridge::driver::Compilation::Continue;
                 }

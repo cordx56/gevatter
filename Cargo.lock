@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "serde_core",
+]
+
+[[package]]
 name = "camino"
 version = "1.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -94,11 +104,22 @@ version = "0.1.0"
 dependencies = [
  "gevatter_analyzer",
  "gevatter_editor",
+ "gevatter_lint",
  "gevatter_models",
  "gevatter_rustc_bridge",
  "indexmap",
  "serde",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "gevatter_lint"
+version = "0.1.0"
+dependencies = [
+ "gevatter_models",
+ "gevatter_rustc_bridge",
+ "similar",
  "tracing",
 ]
 
@@ -288,6 +309,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "similar"
+version = "3.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2f8bec09ae8fae0f4f265a4559a9334be3929d8504e9b536df0a41302bd1733"
+dependencies = [
+ "bstr",
 ]
 
 [[package]]
