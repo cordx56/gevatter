@@ -17,8 +17,10 @@ use bridge::interface::interface;
 use bridge::span;
 use bridge::{FromRustc, TyCtxt};
 
+mod emitter;
 pub mod phase;
 
+use emitter::{Gate, GatedEmitter};
 use phase::Phase;
 
 pub struct DefaultRustc {
@@ -41,6 +43,9 @@ pub struct GevatterDriver {
     args: Vec<String>,
     current_phase: Phase,
     verified: Option<ReportFile>,
+    diag_gate: Gate,
+    /// only checked on lint; check whether error count grows
+    denied: Option<bool>,
 }
 impl GevatterDriver {
     /// Pass original arguments for this function;
@@ -51,11 +56,21 @@ impl GevatterDriver {
             args: original_args,
             current_phase,
             verified: None,
+            diag_gate: Gate::default(),
+            denied: None,
         }
     }
     /// Run the compiler; pass edited arguments for passing the compiler (if needed)
     pub fn run(mut self, args: &[String]) -> ExitCode {
-        if catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok() {
+        let compiled = catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok();
+        if let Some(denied) = self.denied {
+            if denied {
+                return ExitCode::FAILURE;
+            } else {
+                return ExitCode::SUCCESS;
+            }
+        }
+        if compiled {
             if self.verified.is_some() && *phase::LINT {
                 tracing::info!("edited sources are compiled; re-exec for lints");
                 if let Err(e) = self.re_exec(Phase::Lint) {
@@ -171,19 +186,23 @@ impl Callbacks for GevatterDriver {
             .crate_attr
             .extend(lint::crate_attributes());
 
-        let reports = match self.current_phase {
-            Phase::Fallback | Phase::Lint => true,
-            Phase::Verification => !*phase::LINT,
-            _ => false,
-        };
-        if !reports {
-            // ignore all diags on other than verification or fallback phase
-            config.psess_created = Some(Box::new(|psess| {
-                *psess = bridge::session::parse::ParseSess::with_dcx(
-                    DiagCtxt::new(Box::new(SilentEmitter)),
-                    psess.clone_source_map(),
-                );
-            }));
+        match self.current_phase {
+            Phase::Fallback => {}
+            Phase::Verification if !*phase::LINT => {}
+            Phase::Lint => {
+                // ignore all other error/warn than Gevatter
+                let gate = self.diag_gate.clone();
+                config.psess_created = Some(Box::new(move |psess| GatedEmitter::init(psess, gate)));
+            }
+            _ => {
+                // ignore all diags on other than verification, lint, or fallback phase
+                config.psess_created = Some(Box::new(|psess| {
+                    *psess = bridge::session::parse::ParseSess::with_dcx(
+                        DiagCtxt::new(Box::new(SilentEmitter)),
+                        psess.clone_source_map(),
+                    );
+                }));
+            }
         }
 
         if !matches!(self.current_phase, Phase::Fallback | Phase::Lint) {
@@ -420,8 +439,25 @@ impl Callbacks for GevatterDriver {
             }
             Phase::Fallback => bridge::driver::Compilation::Continue,
             Phase::Lint => {
-                lint::emit_lints(tcx, &EditsFile::current().load());
-                bridge::driver::Compilation::Continue
+                let lints = lint::SignatureLints::new(tcx, &EditsFile::current().load());
+                let has_error = catch_fatal_errors(|| tcx.ensure_ok().analysis(())).is_err()
+                    || tcx.dcx().has_errors().is_some();
+                if !has_error {
+                    self.diag_gate.pass(|| lints.emit(tcx));
+                    return bridge::driver::Compilation::Continue;
+                }
+
+                if lints.fixes_errors() {
+                    let errors = tcx.dcx().err_count();
+                    self.diag_gate.pass(|| lints.emit(tcx));
+                    self.denied = Some(tcx.dcx().err_count() > errors);
+                } else {
+                    tracing::warn!("the original has errors which are not fixed by the edits");
+                    if let Err(e) = self.re_exec(Phase::Fallback) {
+                        tracing::error!("process exec error: {e:?}");
+                    }
+                }
+                bridge::driver::Compilation::Stop
             }
         }
     }
