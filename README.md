@@ -22,7 +22,39 @@ Required toolchains are downloaded by `cargo-gevatter` on first run.
 ## Usage
 
 ```bash
-cargo gevatter lint
+cargo gevatter
+```
+
+## Examples
+
+Run `cargo gevatter` on `examples/small-annotation-errors`;
+You can see detailed lifetime annotation error messages and suggested fixes:
+
+```
+error: lifetime annotations of `switch` have to be changed to fix lifetime errors
+ --> examples/small-annotation-errors/src/main.rs:5:4
+  |
+5 | fn switch<'a>(t: &'a Two, flag: bool) -> &'a str {
+  |    ^^^^^^
+  |
+  = note: `#[deny(gevatter::fixable_lifetime_errors)]` on by default
+help: change the lifetime annotations as follows
+  |
+5 - fn switch<'a>(t: &'a Two, flag: bool) -> &'a str {
+5 + fn switch<'a, 'b, 'c>(t: &Two<'b, 'c>, flag: bool) -> &'a str where 'b: 'a, 'c: 'a {
+  |
+
+error: lifetime annotations of `first` have to be changed to fix lifetime errors
+ --> examples/small-annotation-errors/src/main.rs:8:4
+  |
+8 | fn first<'a>(t: Two<'a, 'a>) -> &'a str {
+  |    ^^^^^
+  |
+help: change the lifetime annotations as follows
+  |
+8 - fn first<'a>(t: Two<'a, 'a>) -> &'a str {
+8 + fn first<'a>(t: Two<'a, '_>) -> &'a str {
+  |
 ```
 
 ## Miscellaneous
