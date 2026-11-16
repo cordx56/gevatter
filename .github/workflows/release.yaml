@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build All
         run: |
-          ./x cargo build --release
+          ./x cargo build --release -p gevatter_driver -p cargo-gevatter
       - name: Pack
         run: |
           cp target/release/cargo-gevatter "./cargo-gevatter-$(rustc --print=host-tuple)"
