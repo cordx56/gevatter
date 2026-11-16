@@ -72,18 +72,13 @@ pub fn install_toolchain() -> io::Result<PathBuf> {
     archive::download_read(
         &format!("{}/{DRIVER}-{HOST_TUPLE}.tar.xz", release_url()),
         |mut entry| {
-            if entry
-                .path()?
-                .components()
-                .find(|v| match v {
-                    Component::Normal(p) => *p == "stable-version",
-                    _ => false,
-                })
-                .is_some()
-            {
+            let file_name = entry.path()?.file_name();
+            if file_name.is_some_and(|v| *v == Some("stable-version")) {
                 entry.read_to_string(&mut rust_version).map(|_| ())
-            } else {
+            } else if file_name.is_some_and(|v| *v == Some(DRIVER)) {
                 entry.read_to_end(&mut driver_data).map(|_| ())
+            } else {
+                Ok(())
             }
         },
     )
@@ -98,6 +93,7 @@ pub fn install_toolchain() -> io::Result<PathBuf> {
     let driver_path = toolchain_path.join("bin").join(DRIVER);
     let mut driver_file = fs::OpenOptions::new()
         .write(true)
+        .create(true)
         .truncate(true)
         .mode(0o755)
         .open(&driver_path)
@@ -105,6 +101,7 @@ pub fn install_toolchain() -> io::Result<PathBuf> {
     driver_file
         .write_all(&driver_data)
         .inspect_err(|e| tracing::error!("failed to write {driver_path:?}: {e:?}"))?;
+    drop(driver_file);
     link_driver(&driver_path)?;
     Ok(toolchain_path)
 }
