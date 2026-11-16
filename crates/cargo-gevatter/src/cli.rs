@@ -19,13 +19,13 @@ pub enum Command {
         #[arg(long)]
         show_all_diag: bool,
         #[arg(long)]
-        no_preserve_binding: bool,
+        preserve_binding: bool,
     },
     Fix {
         #[arg(short, long)]
         generalize: bool,
         #[arg(long)]
-        no_preserve_binding: bool,
+        preserve_binding: bool,
         #[arg(last = true)]
         args: Vec<String>,
     },

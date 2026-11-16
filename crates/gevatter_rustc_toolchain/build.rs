@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 include!("./src/parse.rs");
 
 fn main() {
-    println!("cargo::rerun-if-env-changed=RUSTC_VERSION");
     if !env::var("RUSTC_VERSION").is_ok_and(|v| !v.is_empty()) {
         let rustc_version = obtain_rustc_version();
         println!("cargo::rustc-env=RUSTC_VERSION={rustc_version}");
@@ -29,8 +28,5 @@ fn rustc(args: &[&str]) -> String {
 fn obtain_rustc_version() -> String {
     let out = rustc(&["-vV"]);
     let release = parse_rustc_version(&out).expect("failed to get version number");
-    if release.contains("-") {
-        panic!("bootstrap cannot be used for nightly");
-    }
     release.to_owned()
 }

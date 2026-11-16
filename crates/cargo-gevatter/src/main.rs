@@ -19,7 +19,7 @@ fn exec(
     command.args(args).envs(
         options
             .iter()
-            .map(|(name, enabled)| (name, enabled.to_string())),
+            .map(|(name, enabled)| (name, if *enabled { "1" } else { "0" })),
     );
     Err(command.exec())
 }
@@ -41,7 +41,7 @@ fn main() -> ExitCode {
     let result = match cli.command.unwrap_or(Command::Lint {
         allow_permissive: false,
         show_all_diag: false,
-        no_preserve_binding: false,
+        preserve_binding: false,
     }) {
         Command::Run { args } => match args.split_first() {
             Some((program, args)) => exec(program, args, &[]),
@@ -50,20 +50,21 @@ fn main() -> ExitCode {
         Command::Lint {
             allow_permissive,
             show_all_diag,
-            no_preserve_binding,
+            preserve_binding,
         } => exec(
             "cargo",
             &["check"],
             &[
                 ("GEVATTER_LINT", true),
                 ("GEVATTER_LINT_ONLY", !show_all_diag),
+                ("GEVATTER_GENERALIZE", true),
                 ("GEVATTER_ALLOW_PERMISSIVE", allow_permissive),
-                ("GEVATTER_PRESERVE_BINDING", !no_preserve_binding),
+                ("GEVATTER_PRESERVE_BINDING", preserve_binding),
             ],
         ),
         Command::Fix {
             generalize,
-            no_preserve_binding,
+            preserve_binding,
             args,
         } => exec(
             "cargo",
@@ -71,7 +72,7 @@ fn main() -> ExitCode {
             &[
                 ("GEVATTER_LINT", true),
                 ("GEVATTER_GENERALIZE", generalize),
-                ("GEVATTER_PRESERVE_BINDING", !no_preserve_binding),
+                ("GEVATTER_PRESERVE_BINDING", preserve_binding),
             ],
         ),
         Command::Toolchain(ToolchainCommand::Install) => {

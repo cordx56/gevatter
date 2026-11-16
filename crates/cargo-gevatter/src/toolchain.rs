@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, symlink};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Stdio;
 use toolchain::{HOST_TUPLE, TOOLCHAIN_BASE_DIR, archive, parse::parse_rustc_version};
@@ -72,10 +72,11 @@ pub fn install_toolchain() -> io::Result<PathBuf> {
     archive::download_read(
         &format!("{}/{DRIVER}-{HOST_TUPLE}.tar.xz", release_url()),
         |mut entry| {
-            let file_name = entry.path()?.file_name();
-            if file_name.is_some_and(|v| *v == Some("stable-version")) {
+            let path = entry.path()?;
+            let file_name = path.file_name();
+            if file_name.is_some_and(|v| v == "stable-version") {
                 entry.read_to_string(&mut rust_version).map(|_| ())
-            } else if file_name.is_some_and(|v| *v == Some(DRIVER)) {
+            } else if file_name.is_some_and(|v| v == DRIVER) {
                 entry.read_to_end(&mut driver_data).map(|_| ())
             } else {
                 Ok(())
@@ -115,6 +116,7 @@ pub fn command(program: impl AsRef<OsStr>) -> io::Result<Command> {
     let mut command = toolchain::command(&toolchain_path, program)?;
     command
         .env("RUSTC", link_path())
-        .env("RUSTC_WORKSPACE_WRAPPER", link_path());
+        .env("RUSTC_WORKSPACE_WRAPPER", link_path())
+        .env("RUSTC_BOOTSTRAP", "1");
     Ok(command)
 }

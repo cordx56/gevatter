@@ -12,7 +12,14 @@ pub mod parse;
 pub const RUSTC_VERSION: &str = env!("RUSTC_VERSION");
 pub const HOST_TUPLE: &str = env!("RUSTC_HOST_TUPLE");
 pub const RUNTIME_COMPONENTS: [&str; 3] = ["rustc", "rust-std", "cargo"];
-pub const BUILD_COMPONENTS: [&str; 5] = ["rustc", "rust-std", "cargo", "rustc-dev", "llvm-tools"];
+pub const BUILD_COMPONENTS: [&str; 6] = [
+    "rustc",
+    "rust-std",
+    "cargo",
+    "rustc-dev",
+    "llvm-tools",
+    "clippy",
+];
 
 const DIST_SERVER: &str = "https://static.rust-lang.org/dist";
 pub const DYLIB_PATH: &str = if cfg!(target_os = "macos") {
