@@ -6,12 +6,11 @@ license.workspace = true
 documentation.workspace = true
 readme.workspace = true
 repository.workspace = true
-
-description = "Diagnoses and fixes lifetime annotations more fluentry than any other tools"
-categories = ["development-tools::debugging"]
+description.workspace = true
+categories.workspace = true
 
 [dependencies]
-toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain" }
+toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain", version = "0.0.1" }
 
 clap.workspace = true
 tracing.workspace = true

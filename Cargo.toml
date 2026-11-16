@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+default-members = [
+    "crates/cargo-gevatter",
+    "crates/gevatter_rustc_toolchain"
+]
 
 [workspace.package]
 version = "0.0.1"
@@ -9,6 +13,8 @@ license = "Apache-2.0"
 documentation = "https://github.com/cordx56/gevatter/blob/main/README.md"
 readme = "README.md"
 repository = "https://github.com/cordx56/gevatter"
+description = "Diagnoses and fixes lifetime annotations more fluentry than any other tools"
+categories = ["development-tools::debugging"]
 
 [workspace.dependencies]
 cargo_metadata = "0.23"

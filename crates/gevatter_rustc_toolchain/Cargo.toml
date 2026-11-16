@@ -3,6 +3,7 @@ name = "gevatter_rustc_toolchain"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Rust toolchain utils for cargo-gevatter"
 
 [dependencies]
 liblzma.workspace = true
