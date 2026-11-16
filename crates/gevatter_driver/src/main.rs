@@ -10,5 +10,11 @@ fn main() -> std::process::ExitCode {
         .with_level(true)
         .init();
 
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() == 2 && args[1] == "--gevatter-version" {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return std::process::ExitCode::SUCCESS;
+    }
+
     run::run_compiler()
 }

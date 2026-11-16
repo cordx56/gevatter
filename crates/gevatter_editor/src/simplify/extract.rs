@@ -249,18 +249,18 @@ impl<'hir> Visitor<'hir> for SlotCollector<'hir> {
     fn visit_ty(&mut self, ty: &'hir hir::Ty<'hir, hir::AmbigArg>) -> Self::Result {
         let outer = self.polarity;
         match ty.kind {
-            hir::TyKind::Ref(lifetime, inner, mutability) => {
+            hir::TyKind::Ref(lifetime, inner) => {
                 self.visit_lifetime(lifetime);
-                if mutability.is_mut() {
+                if inner.mutbl.is_mut() {
                     self.polarity = Polarity::Inv;
                 }
-                self.visit_ty_unambig(inner);
+                self.visit_ty_unambig(inner.ty);
             }
-            hir::TyKind::Ptr(inner, mutability) => {
-                if mutability.is_mut() {
+            hir::TyKind::Ptr(inner) => {
+                if inner.mutbl.is_mut() {
                     self.polarity = Polarity::Inv;
                 }
-                self.visit_ty_unambig(inner);
+                self.visit_ty_unambig(inner.ty);
             }
             hir::TyKind::FnPtr(pointer) => {
                 self.binders += 1;

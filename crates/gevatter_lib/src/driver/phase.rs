@@ -23,6 +23,10 @@ pub static GENERALIZE: LazyLock<bool> = LazyLock::new(|| {
 pub static LINT: LazyLock<bool> =
     LazyLock::new(|| !env::var("GEVATTER_LINT").is_ok_and(|v| matches!(v.as_str(), "0" | "false")));
 
+pub static ALLOW_PERMISSIVE: LazyLock<bool> = LazyLock::new(|| {
+    env::var("GEVATTER_ALLOW_PERMISSIVE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
+});
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Phase {
     /// AnnotationFreshen has a attempt count

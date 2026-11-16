@@ -1,0 +1,11 @@
+[package]
+name = "gevatter_rustc_toolchain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+liblzma.workspace = true
+tar.workspace = true
+tracing.workspace = true
+ureq.workspace = true

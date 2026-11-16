@@ -10,7 +10,6 @@ use indexmap::IndexMap;
 use models::SkipReason;
 
 pub mod binding;
-pub mod callee;
 pub mod outlives;
 pub mod region_name;
 

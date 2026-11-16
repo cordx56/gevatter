@@ -1,0 +1,18 @@
+[package]
+name = "cargo-gevatter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+documentation.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+description = "Diagnoses and fixes lifetime annotations more fluentry than any other tools"
+categories = ["development-tools::debugging"]
+
+[dependencies]
+toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain" }
+
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

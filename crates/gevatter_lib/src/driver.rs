@@ -10,7 +10,7 @@ use crate::binding::{self, BindingFile, BindingState};
 use crate::edits::{EditsFile, HeadersFile, SignaturesFile};
 use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
-use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, compiler_entrypoint};
+use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, run_compiler};
 use bridge::errors::{DiagCtxt, emitter::SilentEmitter};
 use bridge::hir::def_id::LOCAL_CRATE;
 use bridge::interface::interface;
@@ -33,7 +33,7 @@ impl DefaultRustc {
     pub fn run(mut self) -> ExitCode {
         let args = &std::mem::take(&mut self.args);
         catch_with_exit_code(|| {
-            compiler_entrypoint(args, &mut self);
+            run_compiler(args, &mut self);
         })
     }
 }
@@ -62,7 +62,7 @@ impl GevatterDriver {
     }
     /// Run the compiler; pass edited arguments for passing the compiler (if needed)
     pub fn run(mut self, args: &[String]) -> ExitCode {
-        let compiled = catch_fatal_errors(|| compiler_entrypoint(args, &mut self)).is_ok();
+        let compiled = catch_fatal_errors(|| run_compiler(args, &mut self)).is_ok();
         if let Some(denied) = self.denied {
             if denied {
                 return ExitCode::FAILURE;
@@ -185,6 +185,12 @@ impl Callbacks for GevatterDriver {
             .unstable_opts
             .crate_attr
             .extend(lint::crate_attributes());
+        if *phase::ALLOW_PERMISSIVE {
+            config.opts.lint_opts.push((
+                lint::NON_PERMISSIVE_LIFETIMES.name_lower(),
+                bridge::lint::Level::Allow,
+            ));
+        }
 
         match self.current_phase {
             Phase::Fallback => {}
