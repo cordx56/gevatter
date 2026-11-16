@@ -11,11 +11,19 @@
 
 ## Installation
 
-TBD...
+```bash
+cargo install cargo-gevatter --locked
+```
+
+Or downloading `cargo-gevatter` binary from release.
+
+Required toolchains are downloaded by `cargo-gevatter` on first run.
 
 ## Usage
 
-TBD...
+```bash
+cargo gevatter lint
+```
 
 ## Miscellaneous
 
