@@ -7,6 +7,9 @@
     Diagnoses and Fixes Lifetime Annotations<br>
     more fluently than any other existing tools
   </p>
+  <p>
+    <img alt="Gevatter diagnostics example" src="docs/assets/example-mutable.png" width="400">
+  </p>
 </div>
 
 ## Installation
