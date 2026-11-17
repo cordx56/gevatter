@@ -83,6 +83,12 @@ export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer,rust-src"
 
 Try removing `~/.gevatter` if there are some problems.
 
+## Related Discussion
+
+- There is [an issue #148315](https://github.com/rust-lang/rust/issues/148315) that discusses lifetime annotation suggestion improvement
+- There is a paper that proposes lifetime fixing method based on rustc's diagnostics ([DOI: `10.1145/3622821`](https://doi.org/10.1145/3622821))
+  - We think this project is conservative: not trying to change existing APIs
+
 ## Miscellaneous
 
 > [!IMPORTANT]
