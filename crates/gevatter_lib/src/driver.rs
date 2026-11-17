@@ -185,6 +185,12 @@ impl Callbacks for GevatterDriver {
             .unstable_opts
             .crate_attr
             .extend(lint::crate_attributes());
+        if *phase::ALLOW_FIXABLE {
+            config.opts.lint_opts.push((
+                lint::FIXABLE_LIFETIME_ERRORS.name_lower(),
+                bridge::lint::Level::Allow,
+            ));
+        }
         if *phase::ALLOW_PERMISSIVE {
             config.opts.lint_opts.push((
                 lint::NON_PERMISSIVE_LIFETIMES.name_lower(),

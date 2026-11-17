@@ -12,14 +12,7 @@ pub mod parse;
 pub const RUSTC_VERSION: &str = env!("RUSTC_VERSION");
 pub const HOST_TUPLE: &str = env!("RUSTC_HOST_TUPLE");
 pub const RUNTIME_COMPONENTS: [&str; 3] = ["rustc", "rust-std", "cargo"];
-pub const BUILD_COMPONENTS: [&str; 6] = [
-    "rustc",
-    "rust-std",
-    "cargo",
-    "rustc-dev",
-    "llvm-tools",
-    "clippy",
-];
+pub const BUILD_COMPONENTS: [&str; 5] = ["rustc", "rust-std", "cargo", "rustc-dev", "llvm-tools"];
 
 const DIST_SERVER: &str = "https://static.rust-lang.org/dist";
 pub const DYLIB_PATH: &str = if cfg!(target_os = "macos") {
@@ -47,10 +40,11 @@ fn install_component(channel: &str, component: &str) -> io::Result<()> {
     tracing::info!("install {} from {url}", component);
     archive::download_read(&url, |mut entry| {
         let path = entry.path()?.into_owned();
-        let path: PathBuf = path.components().skip(2).collect();
+        let path: Vec<_> = path.components().skip(2).collect();
         if path.is_empty() {
             return Ok(());
         }
+        let path = path.into_iter().fold(PathBuf::new(), |acc, x| acc.join(x));
         let dest = toolchain_root.join(&path);
         fs::create_dir_all(dest.parent().unwrap())?;
         entry.unpack(&dest).map(|_| ())

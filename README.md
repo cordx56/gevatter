@@ -57,6 +57,8 @@ help: change the lifetime annotations as follows
   |
 ```
 
+You can execute it with fixed sources without applying the fixes by running `cargo gevatter run`.
+
 ## Miscellaneous
 
 > [!IMPORTANT]

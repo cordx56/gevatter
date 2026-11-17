@@ -27,9 +27,8 @@ fn link_driver(driver_path: &Path) -> io::Result<()> {
     if fs::read_link(&link_path).is_ok_and(|linked| linked == driver_path) {
         return Ok(());
     }
-    if let Some(binary_dir) = link_path.parent() {
-        fs::create_dir_all(binary_dir)?;
-    }
+    fs::remove_file(&link_path).ok();
+    fs::create_dir_all(link_path.parent().unwrap())?;
     symlink(driver_path, link_path)
 }
 
@@ -63,6 +62,7 @@ pub fn ensure_toolchain() -> io::Result<PathBuf> {
             return Ok(toolchain_dir().expect("toolchain not found"));
         }
     }
+    println!("Installing Gevatter toolchain...");
     install_toolchain()
 }
 

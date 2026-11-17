@@ -38,16 +38,30 @@ fn main() -> ExitCode {
         .map(|(_, arg)| arg);
     let cli = Cli::parse_from(args);
 
-    let result = match cli.command.unwrap_or(Command::Lint {
+    let result = match cli.command.unwrap_or(Command::Check {
+        allow_fixable: false,
         allow_permissive: false,
         show_all_diag: false,
         preserve_binding: false,
     }) {
-        Command::Run { args } => match args.split_first() {
-            Some((program, args)) => exec(program, args, &[]),
-            None => Err(io::Error::other("no command is given")),
-        },
-        Command::Lint {
+        Command::Run { args } => {
+            let args_iter = std::iter::once("run");
+            let args: Vec<_> = if args.is_empty() {
+                args_iter
+                    .chain(std::iter::once("--"))
+                    .chain(args.iter().map(|v| v.as_str()))
+                    .collect()
+            } else {
+                args_iter.collect()
+            };
+            exec(
+                "cargo",
+                &args,
+                &[("GEVATTER_LINT", false), ("GEVATTER_GENERALIZE", true)],
+            )
+        }
+        Command::Check {
+            allow_fixable,
             allow_permissive,
             show_all_diag,
             preserve_binding,
@@ -58,12 +72,13 @@ fn main() -> ExitCode {
                 ("GEVATTER_LINT", true),
                 ("GEVATTER_LINT_ONLY", !show_all_diag),
                 ("GEVATTER_GENERALIZE", true),
+                ("GEVATTER_ALLOW_FIXABLE", allow_fixable),
                 ("GEVATTER_ALLOW_PERMISSIVE", allow_permissive),
                 ("GEVATTER_PRESERVE_BINDING", preserve_binding),
             ],
         ),
         Command::Fix {
-            generalize,
+            no_generalize,
             preserve_binding,
             args,
         } => exec(
@@ -71,7 +86,7 @@ fn main() -> ExitCode {
             &[vec!["fix".to_owned()], args].concat(),
             &[
                 ("GEVATTER_LINT", true),
-                ("GEVATTER_GENERALIZE", generalize),
+                ("GEVATTER_GENERALIZE", !no_generalize),
                 ("GEVATTER_PRESERVE_BINDING", preserve_binding),
             ],
         ),

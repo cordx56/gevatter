@@ -9,26 +9,39 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Pass given arguments to `cargo run` with fixed sources
     Run {
-        #[arg(last = true, required = true)]
+        #[arg(last = true, required = false)]
         args: Vec<String>,
     },
-    Lint {
+    /// Check lifetime annotations
+    Check {
+        /// Allow all fixable errors
+        #[arg(long)]
+        allow_fixable: bool,
+        /// Allow all non-permissive annotations
         #[arg(long)]
         allow_permissive: bool,
+        /// Show all diagnostics by other than `rustc`
         #[arg(long)]
         show_all_diag: bool,
+        /// Preserve existing bindings
         #[arg(long)]
         preserve_binding: bool,
     },
+    /// Auto fix lifetime annotations
     Fix {
+        /// Do not fix generalizable (non-permissive) annotations
         #[arg(short, long)]
-        generalize: bool,
+        no_generalize: bool,
+        /// Preserve existing bindings
         #[arg(long)]
         preserve_binding: bool,
+        /// Passed to `cargo fix`
         #[arg(last = true)]
         args: Vec<String>,
     },
+    /// Toolchain related actions
     #[command(subcommand)]
     Toolchain(ToolchainCommand),
 }

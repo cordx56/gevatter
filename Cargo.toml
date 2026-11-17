@@ -7,7 +7,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.0.2"
+version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 documentation = "https://github.com/cordx56/gevatter/blob/main/README.md"

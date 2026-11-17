@@ -10,7 +10,7 @@ description.workspace = true
 categories.workspace = true
 
 [dependencies]
-toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain", version = "0.0.2" }
+toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain", version = "0.1" }
 
 clap.workspace = true
 tracing.workspace = true
