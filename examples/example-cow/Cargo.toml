@@ -1,0 +1,6 @@
+[package]
+name = "example-cow"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
