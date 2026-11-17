@@ -13,6 +13,7 @@ pub extern crate rustc_session;
 pub extern crate rustc_span;
 
 pub use middle::ty::TyCtxt;
+pub use models::SkipReason;
 pub use rustc_borrowck::consumers as borrowck;
 pub use rustc_driver as driver;
 pub use rustc_errors as errors;
@@ -24,6 +25,15 @@ pub use rustc_lint_defs as lint_defs;
 pub use rustc_middle as middle;
 pub use rustc_session as session;
 pub use rustc_span as span;
+
+pub fn check_well_formedness(tcx: TyCtxt<'_>) -> Option<SkipReason> {
+    for owner in tcx.hir_crate_items(()).owners() {
+        if owner.def_id != hir::def_id::CRATE_DEF_ID {
+            tcx.ensure_ok().check_well_formed(owner.def_id);
+        }
+    }
+    (tcx.dcx().err_count() != 0).then_some(SkipReason::WellFormednessErrors)
+}
 
 pub trait FromRustc<T> {
     fn from_rustc(value: T) -> Self;

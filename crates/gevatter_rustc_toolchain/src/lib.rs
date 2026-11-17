@@ -31,7 +31,11 @@ pub fn toolchain_dir(channel: &str) -> PathBuf {
 }
 
 fn component_url(channel: &str, component: &str) -> String {
-    format!("{DIST_SERVER}/{component}-{channel}-{HOST_TUPLE}.tar.xz")
+    if component == "rust-src" {
+        format!("{DIST_SERVER}/{component}-{channel}.tar.xz")
+    } else {
+        format!("{DIST_SERVER}/{component}-{channel}-{HOST_TUPLE}.tar.xz")
+    }
 }
 
 fn install_component(channel: &str, component: &str) -> io::Result<()> {

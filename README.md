@@ -75,7 +75,7 @@ To build Gevatter, run:
 To change or contribute Gevatter, you can use:
 
 ```bash
-export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer"
+export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer,rust-src"
 ./x cargo clippy --workspace
 ```
 

@@ -28,7 +28,7 @@ pub struct Simplified {
 }
 
 pub fn simplify_signatures(tcx: TyCtxt<'_>, touched: &Touched) -> Simplified {
-    if analyzer::check_well_formedness(tcx).is_some() {
+    if bridge::check_well_formedness(tcx).is_some() {
         tracing::warn!("signatures are not well-formed; nothing is simplified");
         return Simplified::default();
     }

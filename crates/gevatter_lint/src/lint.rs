@@ -164,6 +164,7 @@ impl LintKind {
 pub struct SignatureLints(Vec<(LintKind, SignatureFix)>);
 impl SignatureLints {
     pub fn new(tcx: TyCtxt<'_>, edits: &HeaderEdits) -> Self {
+        bridge::check_well_formedness(tcx);
         let lints = Self(
             tcx.hir_crate_items(())
                 .owners()
