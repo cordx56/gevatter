@@ -4,8 +4,7 @@
     Gevatter
   </h1>
   <p>
-    Diagnoses and Fixes Lifetime Annotations<br>
-    more fluently than any other existing tools
+    Diagnoses and Fixes Lifetime Annotations
   </p>
   <p>
     <img alt="Gevatter diagnostics example" src="docs/assets/example-mutable.png">
