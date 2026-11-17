@@ -59,6 +59,27 @@ help: change the lifetime annotations as follows
 
 You can execute it with fixed sources without applying the fixes by running `cargo gevatter run`.
 
+There are some examples that can be automatically fixed by Gevatter in `examples`.
+
+## Build
+
+Please install Rust building environment before building Gevatter.
+
+To build Gevatter, run:
+
+```bash
+./x cargo build --release -p cargo-gevatter gevatter_driver
+```
+
+To change or contribute Gevatter, you can use:
+
+```bash
+export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer"
+./x cargo clippy --workspace
+```
+
+Try removing `~/.gevatter` if there are some problems.
+
 ## Miscellaneous
 
 > [!IMPORTANT]
