@@ -1,0 +1,6 @@
+[package]
+name = "cow-mutable"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
