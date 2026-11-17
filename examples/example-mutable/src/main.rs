@@ -1,11 +1,26 @@
-use std::borrow::Cow;
-fn ascii_capitalize<'a>(v: &'a mut Cow<'a, str>) {
-    let mut iter = v.chars();
-    let first = iter.next().unwrap().to_ascii_uppercase();
-    *v = std::iter::once(first).chain(iter).collect();
+struct RustcVersion<'a, 'b> {
+    source: Option<&'a str>,
+    version: &'b str,
+    channel: &'b str,
 }
+
+fn get_toolchain<'a>(source: &'a str) -> RustcVersion<'a, 'a> {
+    let data: Vec<_> = source.split(" ").collect();
+    RustcVersion {
+        source: Some(source),
+        version: data[1],
+        channel: data[2],
+    }
+}
+
+fn update<'a>(toolchain: &'a mut RustcVersion<'a, 'a>, version: &'a str) {
+    toolchain.version = version;
+    toolchain.source = None;
+}
+
 fn main() {
-    let mut s = Cow::from("hello");
-    ascii_capitalize(&mut s);
-    println!("{s}");
+    let data = String::from("rustc 1.100.0 stable");
+    let mut toolchain = get_toolchain(&data);
+    update(&mut toolchain, "1.100.0");
+    println!("{} {}", toolchain.channel, toolchain.version);
 }
