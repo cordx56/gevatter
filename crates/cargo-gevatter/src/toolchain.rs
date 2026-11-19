@@ -21,6 +21,9 @@ fn release_url() -> String {
 fn gevatter_bin_dir() -> PathBuf {
     toolchain::INSTALL_DIR.join("bin")
 }
+fn driver_cmd() -> String {
+    env::var("GEVATTER_DRIVER").unwrap_or(DRIVER.to_string())
+}
 
 fn link_driver(driver_path: &Path) -> io::Result<()> {
     let link_path = gevatter_bin_dir().join(DRIVER);
@@ -33,7 +36,7 @@ fn link_driver(driver_path: &Path) -> io::Result<()> {
 }
 
 fn driver_command() -> Command {
-    let mut cmd = Command::new(DRIVER);
+    let mut cmd = Command::new(driver_cmd());
     cmd.env(
         "PATH",
         toolchain::prepend_paths("PATH", [gevatter_bin_dir()]).expect("failed to make PATH"),
@@ -122,7 +125,7 @@ pub fn remove_toolchain() -> io::Result<()> {
 
 pub fn command(program: impl AsRef<OsStr>) -> io::Result<Command> {
     let toolchain_path = ensure_toolchain()?;
-    let driver_cmd = env::var("GEVATTER_DRIVER").unwrap_or(DRIVER.to_string());
+    let driver_cmd = driver_cmd();
     let mut command = Command::new(program);
     command
         .env(

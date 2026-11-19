@@ -50,7 +50,9 @@ fn install_component(channel: &str, component: &str) -> io::Result<()> {
         let path = path.into_iter().fold(PathBuf::new(), |acc, x| acc.join(x));
         let dest = toolchain_root.join(&path);
         fs::create_dir_all(dest.parent().unwrap())?;
-        entry.unpack(&dest).map(|_| ())
+        entry.unpack(&dest)?;
+        tracing::debug!("{} extracted to {}", path.display(), dest.display());
+        Ok(())
     })
 }
 

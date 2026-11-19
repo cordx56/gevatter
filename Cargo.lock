@@ -72,6 +72,8 @@ name = "bootstrap"
 version = "0.1.2"
 dependencies = [
  "gevatter_rustc_toolchain",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

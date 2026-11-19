@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 toolchain = { path = "../gevatter_rustc_toolchain", package = "gevatter_rustc_toolchain" }
+
+tracing.workspace = true
+tracing-subscriber.workspace = true

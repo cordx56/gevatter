@@ -15,6 +15,13 @@ static RUST_COMPONENTS: LazyLock<Vec<String>> = LazyLock::new(|| {
 });
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_target(true)
+        .with_level(true)
+        .init();
+
     let toolchain_root = toolchain::ensure_rust_toolchain(
         env!("RUSTC_VERSION"),
         RUST_COMPONENTS.iter().map(|v| v.as_str()),

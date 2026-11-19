@@ -64,7 +64,7 @@ To apply these fixes, run `cargo gevatter fix`.
 
 There are some examples that can be automatically fixed by Gevatter in `examples`.
 
-## Build
+## Build and Development
 
 Please install Rust building environment before building Gevatter.
 
@@ -82,6 +82,15 @@ export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer,rust-src"
 ```
 
 Try removing `~/.gevatter` if there are some problems.
+
+To use built Gevatter:
+
+```bash
+export GEVATTER_DRIVER="$(pwd)/target/release/gevatter_driver"
+./x ./target/release/cargo-gevatter
+```
+
+The script `x` sets required path.
 
 ## Related Discussions
 
