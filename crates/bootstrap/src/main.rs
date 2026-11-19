@@ -1,5 +1,6 @@
 use std::env;
 use std::os::unix::process::CommandExt;
+use std::process::Command;
 use std::sync::LazyLock;
 use toolchain::BUILD_COMPONENTS;
 
@@ -23,8 +24,17 @@ fn main() {
     let mut args = env::args_os().skip(1);
     let command = args.next().expect("no extra args");
 
-    let error = toolchain::command(&toolchain_root, command)
-        .expect("failed to set $PATH")
+    let error = Command::new(command)
+        .env(
+            "PATH",
+            toolchain::prepend_paths("PATH", [toolchain_root.join("bin")])
+                .expect("failed to make PATH"),
+        )
+        .env(
+            toolchain::DYLIB_PATH,
+            toolchain::prepend_paths(toolchain::DYLIB_PATH, [toolchain_root.join("lib")])
+                .expect("failed to make DYLIB_PATH"),
+        )
         .args(args)
         .env("RUSTC_BOOTSTRAP", "1")
         .exec();

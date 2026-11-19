@@ -1,9 +1,8 @@
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 pub mod archive;
@@ -85,20 +84,11 @@ pub fn remove_rust_toolchains() -> io::Result<()> {
     }
 }
 
-fn prepended(variable: &str, path: PathBuf) -> io::Result<OsString> {
+pub fn prepend_paths(
+    variable: &str,
+    front: impl IntoIterator<Item = PathBuf>,
+) -> io::Result<OsString> {
     let paths = env::var_os(variable).unwrap_or_default();
     let paths = env::split_paths(&paths).filter(|path| !path.as_os_str().is_empty());
-    env::join_paths(std::iter::once(path).chain(paths)).map_err(io::Error::other)
-}
-
-pub fn command(toolchain_root: &Path, program: impl AsRef<OsStr>) -> io::Result<Command> {
-    let mut command = Command::new(program);
-    command.env("PATH", prepended("PATH", toolchain_root.join("bin"))?);
-    /*
-        .env(
-            DYLIB_PATH,
-            prepended(DYLIB_PATH, toolchain_root.join("lib"))?,
-        );
-    */
-    Ok(command)
+    env::join_paths(front.into_iter().chain(paths)).map_err(io::Error::other)
 }

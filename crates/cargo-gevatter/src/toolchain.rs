@@ -18,12 +18,12 @@ fn release_url() -> String {
     )
 }
 
-fn link_path() -> PathBuf {
-    toolchain::INSTALL_DIR.join("bin").join(DRIVER)
+fn gevatter_bin_dir() -> PathBuf {
+    toolchain::INSTALL_DIR.join("bin")
 }
 
 fn link_driver(driver_path: &Path) -> io::Result<()> {
-    let link_path = link_path();
+    let link_path = gevatter_bin_dir().join(DRIVER);
     if fs::read_link(&link_path).is_ok_and(|linked| linked == driver_path) {
         return Ok(());
     }
@@ -32,9 +32,18 @@ fn link_driver(driver_path: &Path) -> io::Result<()> {
     symlink(driver_path, link_path)
 }
 
+fn driver_command() -> Command {
+    let mut cmd = Command::new(DRIVER);
+    cmd.env(
+        "PATH",
+        toolchain::prepend_paths("PATH", [gevatter_bin_dir()]).expect("failed to make PATH"),
+    );
+    cmd
+}
+
 pub fn toolchain_dir() -> Option<PathBuf> {
     let rustc_out = String::from_utf8(
-        Command::new(link_path())
+        driver_command()
             .args(["-vV"])
             .stdout(Stdio::piped())
             .spawn()
@@ -48,7 +57,7 @@ pub fn toolchain_dir() -> Option<PathBuf> {
     Some(TOOLCHAIN_BASE_DIR.join(format!("{rustc_version}-{HOST_TUPLE}")))
 }
 pub fn ensure_toolchain() -> io::Result<PathBuf> {
-    if let Ok(child) = Command::new(link_path())
+    if let Ok(child) = driver_command()
         .args(["--gevatter-version"])
         .stdout(Stdio::piped())
         .spawn()
@@ -66,6 +75,7 @@ pub fn ensure_toolchain() -> io::Result<PathBuf> {
     install_toolchain()
 }
 
+/// Returns Rust toolchain path
 pub fn install_toolchain() -> io::Result<PathBuf> {
     let mut rust_version = String::new();
     let mut driver_data = Vec::new();
@@ -84,9 +94,8 @@ pub fn install_toolchain() -> io::Result<PathBuf> {
         },
     )
     .inspect_err(|e| tracing::error!("failed to download {DRIVER}: {e:?}"))?;
-    rust_version = rust_version.trim().to_owned();
     let toolchain_path =
-        toolchain::ensure_rust_toolchain(&rust_version, toolchain::RUNTIME_COMPONENTS)
+        toolchain::ensure_rust_toolchain(rust_version.trim(), toolchain::RUNTIME_COMPONENTS)
             .inspect_err(|e| {
                 tracing::error!("failed to install Rust toolchain for {DRIVER}: {e:?}")
             })?;
@@ -113,10 +122,16 @@ pub fn remove_toolchain() -> io::Result<()> {
 
 pub fn command(program: impl AsRef<OsStr>) -> io::Result<Command> {
     let toolchain_path = ensure_toolchain()?;
-    let mut command = toolchain::command(&toolchain_path, program)?;
+    let driver_cmd = env::var("GEVATTER_DRIVER").unwrap_or(DRIVER.to_string());
+    let mut command = Command::new(program);
     command
-        .env("RUSTC", link_path())
-        .env("RUSTC_WORKSPACE_WRAPPER", link_path())
+        .env(
+            "PATH",
+            toolchain::prepend_paths("PATH", [toolchain_path.join("bin")])
+                .expect("failed to make PATH"),
+        )
+        .env("RUSTC", &driver_cmd)
+        .env("RUSTC_WORKSPACE_WRAPPER", &driver_cmd)
         .env("RUSTC_BOOTSTRAP", "1");
     Ok(command)
 }
