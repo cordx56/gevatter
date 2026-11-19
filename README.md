@@ -4,7 +4,7 @@
     Gevatter
   </h1>
   <p>
-    Diagnoses and Fixes Lifetime Annotations
+    Diagnoses and fixes lifetime annotations where rustc and Clippy offer no automatic fix
   </p>
   <p>
     <img alt="Gevatter diagnostics example" src="docs/assets/example-mutable.png">

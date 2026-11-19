@@ -14,7 +14,7 @@ license = "Apache-2.0"
 documentation = "https://github.com/cordx56/gevatter/blob/main/README.md"
 readme = "README.md"
 repository = "https://github.com/cordx56/gevatter"
-description = "Diagnoses and fixes lifetime annotations more fluentry than any other tools"
+description = "Diagnoses and fixes lifetime annotations where rustc and Clippy offer no automatic fix"
 categories = ["development-tools::debugging"]
 
 [workspace.dependencies]
