@@ -1,24 +1,26 @@
 use editor::TemporaryFileLoader;
-use editor::freshen::Generalization;
-use editor::simplify::Touched;
-use models::{CrateReport, FunctionKey, FunctionStatus, HeaderEdits};
+use models::{CrateReport, FunctionKey, HeaderEdits};
 use std::collections::BTreeSet;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
-use crate::binding::{self, BindingFile, BindingState};
-use crate::edits::{EditsFile, HeadersFile, SignaturesFile};
+use crate::binding::{BindingFile, BindingState};
+use crate::edits::EditsFile;
 use crate::introduced::IntroducedFile;
 use crate::report::ReportFile;
+use bridge::TyCtxt;
 use bridge::driver::{Callbacks, catch_fatal_errors, catch_with_exit_code, run_compiler};
 use bridge::errors::{DiagCtxt, emitter::SilentEmitter};
 use bridge::hir::def_id::LOCAL_CRATE;
 use bridge::interface::interface;
 use bridge::span;
-use bridge::{FromRustc, TyCtxt};
 
+pub mod analyze;
 mod emitter;
+pub mod freshen;
 pub mod phase;
+pub mod simplify;
+pub mod verification;
 
 use emitter::{Gate, GatedEmitter};
 use phase::Phase;
@@ -231,220 +233,10 @@ impl Callbacks for GevatterDriver {
         );
 
         match self.current_phase {
-            Phase::AnnotationFreshen(attempt) => {
-                let bindings = BindingFile::current();
-                let state = match attempt {
-                    0 => BindingState::default(),
-                    _ => bindings.load(),
-                }
-                .start_attempt(tcx, attempt);
-                bindings.store(&state);
-                HeadersFile::current().store(&lint::headers(tcx, &TemporaryFileLoader));
-                SignaturesFile::current().store(&editor::simplify::resolved_signatures(tcx));
-                let generalization = phase::GENERALIZE.then_some(Generalization {
-                    excluded: state.ungeneralized,
-                });
-                let freshened = editor::freshen::freshen_annotations(
-                    tcx,
-                    &state.preserved,
-                    generalization.as_ref(),
-                );
-                IntroducedFile::current().store(&freshened.functions);
-                if editor::apply_to_file(&freshened.edits).is_err() {
-                    tracing::warn!("failed to edit file; re-exec for next phase");
-                } else {
-                    tracing::info!("edits applied; re-exec for next phase");
-                }
-
-                let file = ReportFile::of(tcx);
-                file.store(&file.empty());
-
-                if let Err(e) = self.re_exec(self.current_phase.next_phase().unwrap()) {
-                    tracing::error!("process exec error: {e:?}");
-                }
-                bridge::driver::Compilation::Stop
-            }
-            Phase::AnalyzeAndFix(_) => {
-                let outlive_reports = analyzer::report_outlives(tcx);
-                let state = BindingFile::current().load();
-                let locations =
-                    editor::predicates::collect_predicates_locations(tcx, &state.preserved);
-                let round = editor::resolver::outlive_report_edits(&outlive_reports, &locations);
-                let next_round = self
-                    .current_phase
-                    .next_round()
-                    // if edits is empty, we should go next phase;
-                    .filter(|_| !round.edits.is_empty());
-                // if there are some edits to apply while next round is None,
-                // it shows that there are edits we should apply but max fix rounds exceeded.
-                if next_round.is_none() && !round.edits.is_empty() {
-                    tracing::warn!("no fixpoint after {} rounds", *phase::MAX_FIX_ROUNDS);
-                }
-
-                let file = ReportFile::of(tcx);
-                let mut report = file.load();
-                report.record_round(&round.functions);
-                file.store(&report);
-                for function in &round.functions {
-                    match &function.status {
-                        FunctionStatus::Unfixable(reason) => {
-                            tracing::warn!("{} is unfixable: {reason}", function.def_path)
-                        }
-                        status => tracing::debug!("{}: {status:?}", function.def_path),
-                    }
-                }
-
-                let next_phase = if editor::apply_to_file(&round.edits).is_err() {
-                    tracing::warn!("failed to edit file; re-exec for next phase");
-                    None
-                } else {
-                    tracing::info!("edits applied; re-exec for next phase");
-                    next_round
-                }
-                .or_else(|| {
-                    self.current_phase
-                        .next_phase()
-                        .filter(|_| round.edits.is_empty())
-                })
-                .unwrap_or(Phase::Verification);
-
-                if let Err(e) = self.re_exec(next_phase) {
-                    tracing::error!("process exec error: {e:?}");
-                }
-                bridge::driver::Compilation::Stop
-            }
-            Phase::Simplify => {
-                let file = ReportFile::of(tcx);
-                let mut report = file.load();
-                let state = BindingFile::current().load();
-                let freshened = IntroducedFile::current().load();
-                let fixed: BTreeSet<_> = report
-                    .functions
-                    .iter()
-                    .filter(|function| !function.where_added.is_empty())
-                    .map(|function| function.def_path.clone())
-                    .collect();
-                let touched = Touched {
-                    freshened,
-                    fixed,
-                    settled: report.settled(),
-                    preserved: state.preserved,
-                };
-                let simplified = editor::simplify::simplify_signatures(tcx, &touched);
-                let applied = TemporaryFileLoader::snapshot_sources().and_then(|_| {
-                    editor::apply_to_file(&simplified.edits)
-                        .or_else(|e| TemporaryFileLoader::restore_sources().and(Err(e)))
-                });
-                match applied {
-                    Ok(()) => {
-                        tracing::info!("simplification applied; re-exec for next phase");
-                        report.record_simplification(simplified.functions);
-                        file.store(&report);
-                    }
-                    Err(e) => tracing::warn!("failed to apply simplification: {e:?}"),
-                }
-                if let Err(e) = self.re_exec(self.current_phase.next_phase().unwrap()) {
-                    tracing::error!("process exec error: {e:?}");
-                }
-                bridge::driver::Compilation::Stop
-            }
-            Phase::Verification => {
-                let outlive_reports = analyzer::report_outlives(tcx);
-                let bindings = BindingFile::current();
-                let mut state = bindings.load();
-                let locations =
-                    editor::predicates::collect_predicates_locations(tcx, &state.preserved);
-                let changes = state.changes(tcx);
-                let file = ReportFile::of(tcx);
-                let mut report = file.load();
-                let settled = report.settled();
-                report.conclude(editor::resolver::verify_reports(
-                    &outlive_reports,
-                    &locations,
-                    &changes,
-                ));
-                file.store(&report);
-                for function in &report.functions {
-                    if let FunctionStatus::Unfixable(reason) = &function.status {
-                        tracing::warn!("{} is unfixable: {reason}", function.def_path);
-                    }
-                    if function.binding_change.is_changed() {
-                        tracing::info!(
-                            "binding of {} changed: {:?}",
-                            function.def_path,
-                            function.binding_change,
-                        );
-                    }
-                }
-                let regressed = report.functions.iter().any(|function| {
-                    matches!(function.status, FunctionStatus::Unfixable(_))
-                        && settled.contains(&function.def_path)
-                });
-                if regressed && report.is_simplified() {
-                    tracing::warn!("verification failed after simplification; retry without it");
-                    self.revert_simplification(&file, report);
-                    return bridge::driver::Compilation::Stop;
-                }
-                let generalized = IntroducedFile::current().generalized();
-                let unfixable: BTreeSet<_> = report
-                    .functions
-                    .iter()
-                    .filter(|function| matches!(function.status, FunctionStatus::Unfixable(_)))
-                    .map(|function| function.def_path.as_str())
-                    .collect();
-                let unpreserved = if *binding::PRESERVE_BINDING {
-                    state.unpreserved(tcx, &changes)
-                } else {
-                    BTreeSet::new()
-                };
-                let blamed: BTreeSet<_> = changes
-                    .keys()
-                    .filter(|def_id| unfixable.contains(tcx.def_path_str(**def_id).as_str()))
-                    .map(|def_id| FunctionKey::from_rustc((tcx, *def_id)))
-                    .chain(unpreserved.iter().cloned())
-                    .filter(|key| generalized.contains(key))
-                    .collect();
-                if !blamed.is_empty() {
-                    tracing::warn!("generalized functions are rejected; retry with their names");
-                    self.restart_without_generalization(&bindings, state, blamed);
-                    return bridge::driver::Compilation::Stop;
-                }
-                if !unpreserved.is_empty() {
-                    tracing::info!(
-                        "{} functions changed binding; restart with their originals",
-                        unpreserved.len(),
-                    );
-                    state.preserved.extend(unpreserved);
-                    bindings.store(&state);
-                    if let Err(e) = self.re_exec(Phase::AnnotationFreshen(state.attempt + 1)) {
-                        tracing::error!("process exec error: {e:?}");
-                    }
-                    return bridge::driver::Compilation::Stop;
-                }
-                if report.verified {
-                    let original = HeadersFile::current().load();
-                    let current = lint::headers(tcx, &TemporaryFileLoader);
-                    let generalities = editor::simplify::generalities(
-                        &SignaturesFile::current().load(),
-                        &editor::simplify::resolved_signatures(tcx),
-                    );
-
-                    let edits = lint::header_edits(&original, &current, &generalities);
-                    EditsFile::current().store(&edits);
-                    if edits.is_empty() && *phase::LINT {
-                        tracing::info!("nothing is edited; re-exec for the original");
-                        if let Err(e) = self.re_exec(Phase::Lint) {
-                            tracing::error!("process exec error: {e:?}");
-                        }
-                        return bridge::driver::Compilation::Stop;
-                    }
-                    self.verified = Some(file);
-                    return bridge::driver::Compilation::Continue;
-                }
-                tracing::warn!("verification failed");
-                self.fall_back();
-                bridge::driver::Compilation::Stop
-            }
+            Phase::AnnotationFreshen(attempt) => freshen::entrypoint(self, tcx, attempt),
+            Phase::AnalyzeAndFix(_) => analyze::entrypoint(self, tcx),
+            Phase::Simplify => simplify::entrypoint(self, tcx),
+            Phase::Verification => verification::entrypoint(self, tcx),
             Phase::Fallback => bridge::driver::Compilation::Continue,
             Phase::Lint => {
                 let lints = lint::SignatureLints::new(tcx, &EditsFile::current().load());
