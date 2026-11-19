@@ -11,3 +11,4 @@ models = { path = "../gevatter_models", package = "gevatter_models" }
 bridge = { path = "../gevatter_rustc_bridge", package = "gevatter_rustc_bridge" }
 
 indexmap.workspace = true
+tracing.workspace = true

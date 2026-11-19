@@ -250,6 +250,7 @@ dependencies = [
  "gevatter_models",
  "gevatter_rustc_bridge",
  "indexmap",
+ "tracing",
 ]
 
 [[package]]

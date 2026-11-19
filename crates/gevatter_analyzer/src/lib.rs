@@ -22,11 +22,16 @@ pub fn report_outlives(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, OutliveRelationR
     let krate = tcx.crate_name(LOCAL_CRATE).to_string();
     let mut functions = IndexMap::new();
     for def_id in tcx.hir_body_owners() {
+        let def_path = tcx.def_path_str(def_id);
+
+        if tcx.mir_built(def_id).is_stolen() {
+            tracing::debug!("{def_path} is stolen; skip");
+            continue;
+        }
         // ignore non-free functions/methods
         if !matches!(tcx.def_kind(def_id), DefKind::Fn | DefKind::AssocFn) {
             continue;
         }
-        let def_path = tcx.def_path_str(def_id);
 
         if borrowck_skipped.is_some() {
             functions.insert(
@@ -43,12 +48,16 @@ pub fn report_outlives(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, OutliveRelationR
         }
 
         let errs_before_borrowck = tcx.dcx().err_count();
+        tracing::debug!(
+            "errors before borrowck: {errs_before_borrowck}; start borrowck of {def_path}"
+        );
         let facts = borrowck::get_bodies_with_borrowck_facts(
             tcx,
             def_id,
             borrowck::ConsumerOptions::PoloniusInputFacts,
         );
         let had_diagnostics = tcx.dcx().err_count() > errs_before_borrowck;
+        tracing::debug!("borrowck finished; diagnostics increase: {had_diagnostics}");
         let self_facts = facts.get(&def_id).expect("facts must have self def_id");
 
         // constraints extraction
