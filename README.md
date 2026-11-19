@@ -83,7 +83,7 @@ export RUST_COMPONENTS="rustfmt,clippy,rust-analyzer,rust-src"
 
 Try removing `~/.gevatter` if there are some problems.
 
-## Related Discussion
+## Related Discussions
 
 - There is [an issue #148315](https://github.com/rust-lang/rust/issues/148315) that discusses lifetime annotation suggestion improvement
 - There is a paper that proposes lifetime fixing method based on rustc's diagnostics ([DOI: `10.1145/3622821`](https://doi.org/10.1145/3622821))
@@ -91,23 +91,30 @@ Try removing `~/.gevatter` if there are some problems.
 
 ## Miscellaneous
 
-> [!IMPORTANT]
-> All contents of this project can be used under Apache License 2.0:
->
-> ```
-> Copyright 2026 Yuki Okamoto
->
-> Licensed under the Apache License, Version 2.0 (the "License");
-> you may not use this file except in compliance with the License.
-> You may obtain a copy of the License at
->
->     http://www.apache.org/licenses/LICENSE-2.0
->
-> Unless required by applicable law or agreed to in writing, software
-> distributed under the License is distributed on an "AS IS" BASIS,
-> WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-> See the License for the specific language governing permissions and
-> limitations under the License.
-> ```
->
-> A full text of the license is also enclosed in LICENSE file.
+The name, Gevatter, comes from Grimms' Fairy Tales.
+
+### Acknowledgements
+
+We used Claude Fable 5.2 to know conventions for writing English and Rust code. Note that we wrote the code by hands.
+
+### License
+
+All contents of this project can be used under Apache License 2.0:
+
+```
+Copyright 2026 Yuki Okamoto
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+A full text of the license is also enclosed in LICENSE file.
