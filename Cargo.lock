@@ -69,7 +69,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bootstrap"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_rustc_toolchain",
  "tracing",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-gevatter"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "clap",
  "gevatter_rustc_toolchain",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_analyzer"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_models",
  "gevatter_rustc_bridge",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_driver"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_lib",
  "tracing",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_editor"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "cargo_metadata",
  "gevatter_analyzer",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_lib"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_analyzer",
  "gevatter_editor",
@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_lint"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_models",
  "gevatter_rustc_bridge",
@@ -303,21 +303,21 @@ dependencies = [
 
 [[package]]
 name = "gevatter_models"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "gevatter_rustc_bridge"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_models",
 ]
 
 [[package]]
 name = "gevatter_rustc_toolchain"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "liblzma",
  "tar",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "gevatter_simplify"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "gevatter_models",
 ]
