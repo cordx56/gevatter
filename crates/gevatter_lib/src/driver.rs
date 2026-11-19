@@ -188,7 +188,7 @@ impl Callbacks for GevatterDriver {
         if *phase::ALLOW_FIXABLE {
             config.opts.lint_opts.push((
                 lint::FIXABLE_LIFETIME_ERRORS.name_lower(),
-                bridge::lint::Level::Allow,
+                bridge::lint::Level::Warn,
             ));
         }
         if *phase::ALLOW_PERMISSIVE {

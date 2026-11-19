@@ -13,14 +13,12 @@ use cli::{Cli, Command, ToolchainCommand};
 fn exec(
     program: impl AsRef<OsStr>,
     args: &[impl AsRef<OsStr>],
-    options: &[(&str, bool)],
+    options: &[(&str, &str)],
 ) -> io::Result<()> {
     let mut command = toolchain::command(program)?;
-    command.args(args).envs(
-        options
-            .iter()
-            .map(|(name, enabled)| (name, if *enabled { "1" } else { "0" })),
-    );
+    command
+        .args(args)
+        .envs(options.iter().map(|(name, value)| (name, value)));
     Err(command.exec())
 }
 
@@ -40,13 +38,15 @@ fn main() -> ExitCode {
 
     let result = match cli.command.unwrap_or(Command::Check {
         allow_fixable: false,
-        allow_permissive: false,
+        allow_warnings: false,
         show_all_diag: false,
+        no_generalize: false,
         preserve_binding: false,
+        args: Vec::new(),
     }) {
         Command::Run { args } => {
             let args_iter = std::iter::once("run");
-            let args: Vec<_> = if args.is_empty() {
+            let args: Vec<_> = if !args.is_empty() {
                 args_iter
                     .chain(std::iter::once("--"))
                     .chain(args.iter().map(|v| v.as_str()))
@@ -57,26 +57,51 @@ fn main() -> ExitCode {
             exec(
                 "cargo",
                 &args,
-                &[("GEVATTER_LINT", false), ("GEVATTER_GENERALIZE", true)],
+                &[("GEVATTER_LINT", "0"), ("GEVATTER_GENERALIZE", "1")],
             )
         }
         Command::Check {
             allow_fixable,
-            allow_permissive,
+            allow_warnings,
             show_all_diag,
+            no_generalize,
             preserve_binding,
-        } => exec(
-            "cargo",
-            &["check"],
-            &[
-                ("GEVATTER_LINT", true),
-                ("GEVATTER_LINT_ONLY", !show_all_diag),
-                ("GEVATTER_GENERALIZE", true),
-                ("GEVATTER_ALLOW_FIXABLE", allow_fixable),
-                ("GEVATTER_ALLOW_PERMISSIVE", allow_permissive),
-                ("GEVATTER_PRESERVE_BINDING", preserve_binding),
-            ],
-        ),
+            args,
+        } => {
+            let args: Vec<_> = std::iter::once("check")
+                .chain(args.iter().map(|v| v.as_str()))
+                .filter(|v| *v != "--keep-going")
+                .chain(std::iter::once("--keep-going"))
+                .collect();
+            exec(
+                "cargo",
+                &args,
+                &[
+                    ("GEVATTER_LINT", "1"),
+                    ("GEVATTER_LINT_ONLY", if !show_all_diag { "1" } else { "0" }),
+                    (
+                        "GEVATTER_GENERALIZE",
+                        if !no_generalize { "1" } else { "0" },
+                    ),
+                    (
+                        "GEVATTER_ALLOW_FIXABLE",
+                        if allow_fixable { "1" } else { "0" },
+                    ),
+                    (
+                        "CARGO_BUILD_WARNINGS",
+                        if allow_warnings || allow_fixable {
+                            "warn"
+                        } else {
+                            "deny"
+                        },
+                    ),
+                    (
+                        "GEVATTER_PRESERVE_BINDING",
+                        if preserve_binding { "1" } else { "0" },
+                    ),
+                ],
+            )
+        }
         Command::Fix {
             no_generalize,
             preserve_binding,
@@ -85,9 +110,15 @@ fn main() -> ExitCode {
             "cargo",
             &[vec!["fix".to_owned()], args].concat(),
             &[
-                ("GEVATTER_LINT", true),
-                ("GEVATTER_GENERALIZE", !no_generalize),
-                ("GEVATTER_PRESERVE_BINDING", preserve_binding),
+                ("GEVATTER_LINT", "1"),
+                (
+                    "GEVATTER_GENERALIZE",
+                    if !no_generalize { "1" } else { "0" },
+                ),
+                (
+                    "GEVATTER_PRESERVE_BINDING",
+                    if preserve_binding { "1" } else { "0" },
+                ),
             ],
         ),
         Command::Toolchain(ToolchainCommand::Install) => {

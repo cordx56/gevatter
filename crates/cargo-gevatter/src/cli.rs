@@ -19,15 +19,21 @@ pub enum Command {
         /// Allow all fixable errors
         #[arg(long)]
         allow_fixable: bool,
-        /// Allow all non-permissive annotations
+        /// Allow warnings (including non-permissive annotations)
         #[arg(long)]
-        allow_permissive: bool,
+        allow_warnings: bool,
         /// Show all diagnostics by other than `rustc`
         #[arg(long)]
         show_all_diag: bool,
+        /// Do not report generalizable (non-permissive) annotations
+        #[arg(short, long)]
+        no_generalize: bool,
         /// Preserve existing bindings
         #[arg(long)]
         preserve_binding: bool,
+        /// Arguments passed to `cargo check`
+        #[arg(last = true)]
+        args: Vec<String>,
     },
     /// Auto fix lifetime annotations
     Fix {
