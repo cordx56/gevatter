@@ -1,7 +1,10 @@
 use bridge::errors::{Applicability, DiagDecorator};
 use bridge::hir::{HirId, def::DefKind, def_id::LocalDefId};
+use bridge::interface::passes::DEFAULT_QUERY_PROVIDERS;
 use bridge::lint::{Lint, LintStore};
-use bridge::span::{BytePos, SourceFile, Span};
+use bridge::middle::util::Providers;
+use bridge::session::Session;
+use bridge::span::{BytePos, Ident, SourceFile, Span};
 use bridge::{FromRustc, TyCtxt};
 use models::{FunctionKey, Generality, HeaderEdit, HeaderEdits, HeaderKind};
 use std::collections::BTreeMap;
@@ -13,8 +16,12 @@ pub use fixable::*;
 pub use permissive::*;
 
 /// Gevatter has to be registered as crate tool
-pub fn crate_attributes() -> [String; 2] {
-    ["feature(register_tool)", "register_tool(gevatter)"].map(String::from)
+pub fn override_queries(_: &Session, providers: &mut Providers) {
+    providers.queries.registered_lint_tools = |tcx, ()| {
+        let mut tools = (DEFAULT_QUERY_PROVIDERS.queries.registered_lint_tools)(tcx, ());
+        tools.insert(Ident::from_str("gevatter"));
+        tools
+    };
 }
 
 pub fn register_lints(store: &mut LintStore) {

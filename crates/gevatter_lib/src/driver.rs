@@ -180,11 +180,7 @@ impl Callbacks for GevatterDriver {
         }
 
         config.register_lints = Some(Box::new(|_, store| lint::register_lints(store)));
-        config
-            .opts
-            .unstable_opts
-            .crate_attr
-            .extend(lint::crate_attributes());
+        config.override_queries = Some(lint::override_queries);
         if *phase::ALLOW_FIXABLE {
             config.opts.lint_opts.push((
                 lint::FIXABLE_LIFETIME_ERRORS.name_lower(),

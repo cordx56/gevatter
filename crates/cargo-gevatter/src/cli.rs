@@ -9,26 +9,27 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Pass given arguments to `cargo run` with fixed sources
+    /// Run `cargo run` with lifetime annotations fixed in memory
     Run {
+        /// Arguments passed to the program
         #[arg(last = true, required = false)]
         args: Vec<String>,
     },
     /// Check lifetime annotations
     Check {
-        /// Allow all fixable errors
+        /// Report fixable errors as warnings (implies `--allow-warnings`)
         #[arg(long)]
         allow_fixable: bool,
-        /// Allow warnings (including non-permissive annotations)
+        /// Exit successfully even with warnings (including non-permissive annotations)
         #[arg(long)]
         allow_warnings: bool,
-        /// Show all diagnostics by other than `rustc`
+        /// Also show diagnostics emitted by `rustc` itself
         #[arg(long)]
         show_all_diag: bool,
         /// Do not report generalizable (non-permissive) annotations
         #[arg(short, long)]
         no_generalize: bool,
-        /// Preserve existing bindings
+        /// Skip changes that switch lifetime parameters between early-bound and late-bound
         #[arg(long)]
         preserve_binding: bool,
         /// Arguments passed to `cargo check`
@@ -40,7 +41,7 @@ pub enum Command {
         /// Do not fix generalizable (non-permissive) annotations
         #[arg(short, long)]
         no_generalize: bool,
-        /// Preserve existing bindings
+        /// Skip changes that switch lifetime parameters between early-bound and late-bound
         #[arg(long)]
         preserve_binding: bool,
         /// Passed to `cargo fix`
