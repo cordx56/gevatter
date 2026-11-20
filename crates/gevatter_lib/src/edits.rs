@@ -3,6 +3,9 @@ use models::{FunctionKey, HeaderEdits, Headers, Signature};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+/// Headers file is intended to keep the item headers of the original sources
+/// stored in freshen, loaded in verification to build the edits.
+/// The file path is decided by [`editor::files::headers_path`].
 #[derive(Clone, Debug)]
 pub struct HeadersFile {
     path: PathBuf,
@@ -28,6 +31,9 @@ impl HeadersFile {
     }
 }
 
+/// Edits file is intended to pass the header edits, from the original to the fixed one;
+/// This is used for lint output.
+/// The file path is decided by [`editor::files::edits_path`].
 #[derive(Clone, Debug)]
 pub struct EditsFile {
     path: PathBuf,
@@ -55,6 +61,9 @@ impl EditsFile {
 
 pub type Signatures = BTreeMap<FunctionKey, Signature>;
 
+/// Signatures file is intended to keep the resolved signatures of the original sources
+/// stored in freshen, loaded in verification to compare generality.
+/// The file path is decided by [`editor::files::signatures_path`].
 #[derive(Clone, Debug)]
 pub struct SignaturesFile {
     path: PathBuf,

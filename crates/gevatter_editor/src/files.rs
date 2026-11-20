@@ -106,6 +106,7 @@ fn ensure_mirror(path: &Path) -> io::Result<Option<PathBuf>> {
     Ok(Some(mirror))
 }
 
+/// File loader which redirects workspace sources to their mirrors in the temporary directory;
 pub struct TemporaryFileLoader;
 impl TemporaryFileLoader {
     /// CALL THIS AT LEAST ONCE before using [`TemporaryFileLoader`].

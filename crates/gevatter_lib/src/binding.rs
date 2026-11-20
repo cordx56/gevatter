@@ -65,6 +65,8 @@ impl BindingState {
     }
 }
 
+/// Binding file is intended to carry [`BindingState`] across restarts.
+/// The file path is decided by [`editor::files::binding_path`].
 #[derive(Clone, Debug)]
 pub struct BindingFile {
     path: PathBuf,

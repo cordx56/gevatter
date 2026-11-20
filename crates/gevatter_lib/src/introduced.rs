@@ -5,6 +5,10 @@ use std::path::PathBuf;
 
 pub type Introduced = BTreeMap<FunctionKey, Freshening>;
 
+/// Introduced file is intended to pass the lifetime annotations introduced by
+/// freshening to later phases;
+/// stored in freshen, loaded in simplify, and in verification to blame generalization.
+/// The file path is decided by [`editor::files::introduced_path`].
 #[derive(Clone, Debug)]
 pub struct IntroducedFile {
     path: PathBuf,

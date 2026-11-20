@@ -4,6 +4,8 @@ use bridge::hir::def_id::LOCAL_CRATE;
 use models::CrateReport;
 use std::path::PathBuf;
 
+/// Report file is intended to accumulate and report the fix progress of a crate.
+/// The file path is decided by [`editor::files::report_path`].
 #[derive(Clone, Debug)]
 pub struct ReportFile {
     path: PathBuf,
