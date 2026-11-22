@@ -2,7 +2,10 @@ use crate::replacements;
 use bridge::hir::{BodyId, ImplItemKind, ItemKind, Node, def::DefKind, def_id::LocalDefId};
 use bridge::span::{FileName, Span, source_map::FileLoader};
 use bridge::{FromRustc, TyCtxt};
-use models::{FunctionKey, Generality, HeaderEdit, HeaderEdits, HeaderKind, Headers, ItemHeader};
+use models::{
+    BindingChange, FunctionKey, Generality, HeaderEdit, HeaderEdits, HeaderKind, Headers,
+    ItemHeader,
+};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{self, PathBuf};
 
@@ -10,6 +13,7 @@ pub fn header_edits(
     original: &Headers,
     current: &Headers,
     generalities: &BTreeMap<FunctionKey, Generality>,
+    bindings: &BTreeMap<FunctionKey, BindingChange>,
 ) -> HeaderEdits {
     let changed = |key: &FunctionKey| {
         original
@@ -34,6 +38,7 @@ pub fn header_edits(
                     .clone()
                     .filter(|parent| changed(parent).is_some()),
                 generality: generalities.get(key).copied(),
+                binding_change: bindings.get(key).cloned().unwrap_or_default(),
             };
             Some((key.clone(), edit))
         })

@@ -32,6 +32,9 @@ pub enum Command {
         /// Skip changes that switch lifetime parameters between early-bound and late-bound
         #[arg(long)]
         preserve_binding: bool,
+        /// Skip changes that switch lifetime parameters only from late-bound to early-bound
+        #[arg(long)]
+        allow_early_to_late: bool,
         /// Arguments passed to `cargo check`
         #[arg(last = true)]
         args: Vec<String>,
@@ -44,6 +47,9 @@ pub enum Command {
         /// Skip changes that switch lifetime parameters between early-bound and late-bound
         #[arg(long)]
         preserve_binding: bool,
+        /// Skip changes that switch lifetime parameters only from late-bound to early-bound
+        #[arg(long)]
+        allow_early_to_late: bool,
         /// Passed to `cargo fix`
         #[arg(last = true)]
         args: Vec<String>,
@@ -51,6 +57,19 @@ pub enum Command {
     /// Toolchain related actions
     #[command(subcommand)]
     Toolchain(ToolchainCommand),
+}
+impl Default for Command {
+    fn default() -> Self {
+        Self::Check {
+            allow_fixable: false,
+            allow_warnings: false,
+            show_all_diag: false,
+            no_generalize: false,
+            preserve_binding: false,
+            allow_early_to_late: false,
+            args: Vec::new(),
+        }
+    }
 }
 
 #[derive(Subcommand)]

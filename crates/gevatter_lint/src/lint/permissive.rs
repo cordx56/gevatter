@@ -9,13 +9,17 @@ lint::declare_tool_lint! {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct NonPermissiveLifetimes;
+pub struct NonPermissiveLifetimes;
 
 impl SignatureLint for NonPermissiveLifetimes {
-    const LINT: &'static lint::Lint = NON_PERMISSIVE_LIFETIMES;
-    const HELP: &'static str = "use more permissive lifetime annotations";
+    fn lint(&self) -> &'static lint::Lint {
+        NON_PERMISSIVE_LIFETIMES
+    }
+    fn help(&self) -> String {
+        "use more permissive lifetime annotations".to_string()
+    }
 
-    fn message(function: &str) -> String {
+    fn message(&self, function: &str) -> String {
         format!("lifetime annotations of `{function}` are more restrictive than necessary")
     }
 }

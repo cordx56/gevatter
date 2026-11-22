@@ -89,7 +89,11 @@ pub fn entrypoint(driver: &mut GevatterDriver, tcx: TyCtxt<'_>) -> Compilation {
             &editor::simplify::resolved_signatures(tcx),
         );
 
-        let edits = lint::header_edits(&original, &current, &generalities);
+        let bindings = changes
+            .iter()
+            .map(|(def_id, change)| (FunctionKey::from_rustc((tcx, *def_id)), change.clone()))
+            .collect();
+        let edits = lint::header_edits(&original, &current, &generalities, &bindings);
         EditsFile::current().store(&edits);
         if edits.is_empty() && *phase::LINT {
             tracing::info!("nothing is edited; re-exec for the original");

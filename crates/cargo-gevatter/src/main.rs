@@ -36,14 +36,7 @@ fn main() -> ExitCode {
         .map(|(_, arg)| arg);
     let cli = Cli::parse_from(args);
 
-    let result = match cli.command.unwrap_or(Command::Check {
-        allow_fixable: false,
-        allow_warnings: false,
-        show_all_diag: false,
-        no_generalize: false,
-        preserve_binding: false,
-        args: Vec::new(),
-    }) {
+    let result = match cli.command.unwrap_or_default() {
         Command::Run { args } => {
             let args_iter = std::iter::once("run");
             let args: Vec<_> = if !args.is_empty() {
@@ -66,6 +59,7 @@ fn main() -> ExitCode {
             show_all_diag,
             no_generalize,
             preserve_binding,
+            allow_early_to_late,
             args,
         } => {
             let args: Vec<_> = std::iter::once("check")
@@ -99,12 +93,17 @@ fn main() -> ExitCode {
                         "GEVATTER_PRESERVE_BINDING",
                         if preserve_binding { "1" } else { "0" },
                     ),
+                    (
+                        "GEVATTER_ALLOW_EARLY_TO_LATE",
+                        if allow_early_to_late { "1" } else { "0" },
+                    ),
                 ],
             )
         }
         Command::Fix {
             no_generalize,
             preserve_binding,
+            allow_early_to_late,
             args,
         } => exec(
             "cargo",
@@ -118,6 +117,10 @@ fn main() -> ExitCode {
                 (
                     "GEVATTER_PRESERVE_BINDING",
                     if preserve_binding { "1" } else { "0" },
+                ),
+                (
+                    "GEVATTER_ALLOW_EARLY_TO_LATE",
+                    if allow_early_to_late { "1" } else { "0" },
                 ),
             ],
         ),

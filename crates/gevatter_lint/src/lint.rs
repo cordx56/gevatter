@@ -9,9 +9,11 @@ use bridge::{FromRustc, TyCtxt};
 use models::{FunctionKey, Generality, HeaderEdit, HeaderEdits, HeaderKind};
 use std::collections::BTreeMap;
 
+mod binding;
 mod fixable;
 mod permissive;
 
+use binding::LateToEarly;
 pub use fixable::*;
 pub use permissive::*;
 
@@ -30,11 +32,15 @@ pub fn register_lints(store: &mut LintStore) {
 
 /// used for emitting lint by [`SignatureLints::emit`]
 pub trait SignatureLint {
-    const LINT: &'static Lint;
-    const HELP: &'static str;
+    fn lint(&self) -> &'static Lint;
+    fn help(&self) -> String;
 
     /// generate lint message using function name
-    fn message(function: &str) -> String;
+    fn message(&self, function: &str) -> String;
+    /// emit notes if there is any additional info
+    fn notes(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 type Parts = Vec<(Span, String)>;
@@ -72,6 +78,7 @@ fn is_current(tcx: TyCtxt<'_>, source: &SourceFile, edit: &HeaderEdit) -> bool {
 struct SignatureFix {
     def_id: LocalDefId,
     generality: Option<Generality>,
+    binds_early: bool,
     parts: Parts,
     parent: Option<(FunctionKey, Parts)>,
 }
@@ -101,6 +108,7 @@ impl SignatureFix {
         Some(Self {
             def_id,
             generality: edit.generality,
+            binds_early: edit.binding_change.has_late_to_early(),
             parts: parts(&source, edit),
             parent: parent.map(|(key, edit)| (key.clone(), parts(&source, edit))),
         })
@@ -110,7 +118,15 @@ impl SignatureFix {
         tcx.local_def_id_to_hir_id(self.def_id)
     }
 
-    fn emit<L: SignatureLint>(self, tcx: TyCtxt<'_>, with_parent: bool) {
+    fn decorate(&self, lint: impl SignatureLint + 'static) -> Box<dyn SignatureLint> {
+        if self.binds_early {
+            Box::new(LateToEarly(lint))
+        } else {
+            Box::new(lint)
+        }
+    }
+
+    fn emit(self, tcx: TyCtxt<'_>, lint: &dyn SignatureLint, with_parent: bool) {
         let hir_id = self.hir_id(tcx);
         let Self {
             def_id,
@@ -127,14 +143,17 @@ impl SignatureFix {
         let span = tcx
             .def_ident_span(def_id)
             .unwrap_or_else(|| tcx.def_span(def_id));
-        let message = L::message(&tcx.def_path_str(def_id));
+        let message = lint.message(&tcx.def_path_str(def_id));
         tcx.emit_node_span_lint(
-            L::LINT,
+            lint.lint(),
             hir_id,
             span,
             DiagDecorator(|diag| {
                 diag.primary_message(message);
-                diag.multipart_suggestion(L::HELP, parts, Applicability::MachineApplicable);
+                diag.multipart_suggestion(lint.help(), parts, Applicability::MachineApplicable);
+                lint.notes().into_iter().for_each(|note| {
+                    diag.note(note);
+                });
             }),
         );
     }
@@ -148,8 +167,15 @@ enum LintKind {
 impl LintKind {
     fn lint(self) -> &'static Lint {
         match self {
-            Self::FixableLifetimeErrors => FixableLifetimeErrors::LINT,
-            Self::NonPermissiveLifetimes => NonPermissiveLifetimes::LINT,
+            Self::FixableLifetimeErrors => FixableLifetimeErrors.lint(),
+            Self::NonPermissiveLifetimes => NonPermissiveLifetimes.lint(),
+        }
+    }
+
+    fn signature_lint(self, fix: &SignatureFix) -> Box<dyn SignatureLint> {
+        match self {
+            Self::FixableLifetimeErrors => fix.decorate(FixableLifetimeErrors),
+            Self::NonPermissiveLifetimes => fix.decorate(NonPermissiveLifetimes),
         }
     }
 
@@ -240,14 +266,8 @@ impl SignatureLints {
                     .parent
                     .as_ref()
                     .is_some_and(|(parent, _)| carriers.get(parent) == Some(&index));
-                match kind {
-                    LintKind::FixableLifetimeErrors => {
-                        fix.emit::<FixableLifetimeErrors>(tcx, with_parent)
-                    }
-                    LintKind::NonPermissiveLifetimes => {
-                        fix.emit::<NonPermissiveLifetimes>(tcx, with_parent)
-                    }
-                }
+                let lint = kind.signature_lint(&fix);
+                fix.emit(tcx, &*lint, with_parent);
             });
     }
 }

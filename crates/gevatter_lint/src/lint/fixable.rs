@@ -12,7 +12,7 @@ lint::declare_tool_lint! {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct FixableLifetimeErrors;
+pub struct FixableLifetimeErrors;
 
 impl FixableLifetimeErrors {
     pub(super) fn has_errors(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
@@ -21,10 +21,14 @@ impl FixableLifetimeErrors {
 }
 
 impl SignatureLint for FixableLifetimeErrors {
-    const LINT: &'static lint::Lint = FIXABLE_LIFETIME_ERRORS;
-    const HELP: &'static str = "change the lifetime annotations as follows";
+    fn lint(&self) -> &'static lint::Lint {
+        FIXABLE_LIFETIME_ERRORS
+    }
+    fn help(&self) -> String {
+        "change the lifetime annotations as follows".to_string()
+    }
 
-    fn message(function: &str) -> String {
+    fn message(&self, function: &str) -> String {
         format!("lifetime annotations of `{function}` have to be changed to fix lifetime errors")
     }
 }

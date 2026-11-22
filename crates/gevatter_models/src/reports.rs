@@ -121,6 +121,9 @@ impl BindingChange {
     pub fn is_changed(&self) -> bool {
         !matches!(self, Self::Unchanged | Self::Incomparable)
     }
+    pub fn has_late_to_early(&self) -> bool {
+        matches!(self, Self::LateToEarly { .. } | Self::Both { .. })
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

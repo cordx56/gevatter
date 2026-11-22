@@ -1,4 +1,4 @@
-use crate::{FunctionKey, Span};
+use crate::{BindingChange, FunctionKey, Span};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -53,6 +53,9 @@ pub struct HeaderEdit {
     pub parent: Option<FunctionKey>,
     #[serde(default)]
     pub generality: Option<Generality>,
+    /// to show binding change note
+    #[serde(default)]
+    pub binding_change: BindingChange,
 }
 
 pub type HeaderEdits = BTreeMap<FunctionKey, HeaderEdit>;

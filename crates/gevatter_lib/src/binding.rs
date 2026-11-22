@@ -13,6 +13,9 @@ use std::sync::LazyLock;
 pub static PRESERVE_BINDING: LazyLock<bool> = LazyLock::new(|| {
     env::var("GEVATTER_PRESERVE_BINDING").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
 });
+pub static ALLOW_EARLY_TO_LATE: LazyLock<bool> = LazyLock::new(|| {
+    env::var("GEVATTER_ALLOW_EARLY_TO_LATE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
+});
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct BindingState {
@@ -58,7 +61,10 @@ impl BindingState {
     ) -> BTreeSet<FunctionKey> {
         changes
             .iter()
-            .filter(|(_, change)| change.is_changed())
+            .filter(|(_, change)| match change {
+                BindingChange::EarlyToLate { .. } => !*ALLOW_EARLY_TO_LATE,
+                change => change.is_changed(),
+            })
             .map(|(def_id, _)| FunctionKey::from_rustc((tcx, *def_id)))
             .filter(|key| !self.preserved.contains(key))
             .collect()
