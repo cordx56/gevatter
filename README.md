@@ -1,7 +1,6 @@
 <div align="center">
   <h1>
-    🕯<br>
-    Gevatter
+    <img alt="Gevatter" src="docs/assets/gevatter-logo.png" width="512">
   </h1>
   <p>
     Diagnoses and fixes lifetime annotations where rustc and Clippy offer no automatic fix
