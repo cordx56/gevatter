@@ -2,7 +2,7 @@ use bridge::TyCtxt;
 use bridge::hir::{def::DefKind, def_id::LocalDefId};
 use bridge::middle::ty;
 use indexmap::IndexMap;
-use models::{Binding, SignatureBinding};
+use models::{Binding, Owner, SignatureBinding};
 use ty::{TypeVisitable, TypeVisitableExt, TypeVisitor};
 
 pub fn signature_bindings(tcx: TyCtxt<'_>) -> IndexMap<LocalDefId, SignatureBinding> {
@@ -20,16 +20,25 @@ fn signature_binding(tcx: TyCtxt<'_>, def_id: LocalDefId) -> Option<SignatureBin
     if signature.references_error() {
         return None;
     }
-    let mut slots = SlotCollector(Vec::new());
-    signature.inputs_and_output.visit_with(&mut slots);
-    Some(slots.0.into_iter().collect())
+    let mut collector = SlotCollector {
+        parent_count: tcx.generics_of(def_id).parent_count,
+        slots: Vec::new(),
+    };
+    signature.inputs_and_output.visit_with(&mut collector);
+    Some(collector.slots.into_iter().collect())
 }
 
-struct SlotCollector(Vec<Option<Binding>>);
+struct SlotCollector {
+    parent_count: usize,
+    slots: Vec<Option<Binding>>,
+}
 impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for SlotCollector {
     fn visit_region(&mut self, region: ty::Region<'tcx>) {
-        self.0.push(match region.kind() {
-            ty::ReEarlyParam(_) => Some(Binding::Early),
+        self.slots.push(match region.kind() {
+            ty::ReEarlyParam(param) if (param.index as usize) < self.parent_count => {
+                Some(Binding::Early(Owner::Parent))
+            }
+            ty::ReEarlyParam(_) => Some(Binding::Early(Owner::Function)),
             ty::ReLateParam(_) => Some(Binding::Late),
             _ => None,
         });

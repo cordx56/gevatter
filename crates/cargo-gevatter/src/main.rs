@@ -13,12 +13,10 @@ use cli::{Cli, Command, ToolchainCommand};
 fn exec(
     program: impl AsRef<OsStr>,
     args: &[impl AsRef<OsStr>],
-    options: &[(&str, &str)],
+    options: impl IntoIterator<Item = (&'static str, &'static str)>,
 ) -> io::Result<()> {
     let mut command = toolchain::command(program)?;
-    command
-        .args(args)
-        .envs(options.iter().map(|(name, value)| (name, value)));
+    command.args(args).envs(options);
     Err(command.exec())
 }
 
@@ -50,7 +48,7 @@ fn main() -> ExitCode {
             exec(
                 "cargo",
                 &args,
-                &[("GEVATTER_LINT", "0"), ("GEVATTER_GENERALIZE", "1")],
+                [("GEVATTER_LINT", "0"), ("GEVATTER_GENERALIZE", "1")],
             )
         }
         Command::Check {
@@ -59,7 +57,6 @@ fn main() -> ExitCode {
             show_all_diag,
             no_generalize,
             preserve_binding,
-            allow_early_to_late,
             args,
         } => {
             let args: Vec<_> = std::iter::once("check")
@@ -70,7 +67,7 @@ fn main() -> ExitCode {
             exec(
                 "cargo",
                 &args,
-                &[
+                [
                     ("GEVATTER_LINT", "1"),
                     ("GEVATTER_LINT_ONLY", if !show_all_diag { "1" } else { "0" }),
                     (
@@ -89,40 +86,27 @@ fn main() -> ExitCode {
                             "deny"
                         },
                     ),
-                    (
-                        "GEVATTER_PRESERVE_BINDING",
-                        if preserve_binding { "1" } else { "0" },
-                    ),
-                    (
-                        "GEVATTER_ALLOW_EARLY_TO_LATE",
-                        if allow_early_to_late { "1" } else { "0" },
-                    ),
-                ],
+                ]
+                .into_iter()
+                .chain(cli::preserve_binding_level(preserve_binding)),
             )
         }
         Command::Fix {
             no_generalize,
             preserve_binding,
-            allow_early_to_late,
             args,
         } => exec(
             "cargo",
             &[vec!["fix".to_owned()], args].concat(),
-            &[
+            [
                 ("GEVATTER_LINT", "1"),
                 (
                     "GEVATTER_GENERALIZE",
                     if !no_generalize { "1" } else { "0" },
                 ),
-                (
-                    "GEVATTER_PRESERVE_BINDING",
-                    if preserve_binding { "1" } else { "0" },
-                ),
-                (
-                    "GEVATTER_ALLOW_EARLY_TO_LATE",
-                    if allow_early_to_late { "1" } else { "0" },
-                ),
-            ],
+            ]
+            .into_iter()
+            .chain(cli::preserve_binding_level(preserve_binding)),
         ),
         Command::Toolchain(ToolchainCommand::Install) => {
             toolchain::install_toolchain().map(|path| println!("{}", path.display()))

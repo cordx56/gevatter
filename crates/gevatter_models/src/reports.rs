@@ -55,8 +55,15 @@ impl Freshening {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Binding {
-    Early,
+    Early(Owner),
     Late,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Owner {
+    Function,
+    Parent,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
@@ -72,17 +79,23 @@ impl SignatureBinding {
         if self.0.len() != new.0.len() {
             return BindingChange::Incomparable;
         }
-        let slots = |from, to| -> Vec<usize> {
+        let slots = |pred: fn(Binding, Binding) -> bool| -> Vec<usize> {
             self.0
                 .iter()
                 .zip(new.0.iter())
                 .enumerate()
-                .filter(|(_, (old, new))| **old == Some(from) && **new == Some(to))
+                .filter(|(_, pair)| matches!(pair, (Some(old), Some(new)) if pred(*old, *new)))
                 .map(|(slot, _)| slot)
                 .collect()
         };
-        let late_to_early = slots(Binding::Late, Binding::Early);
-        let early_to_late = slots(Binding::Early, Binding::Late);
+        let late_to_early = EarlySlots {
+            function: slots(|old, new| {
+                old == Binding::Late && new == Binding::Early(Owner::Function)
+            }),
+            parent: slots(|old, new| old == Binding::Late && new == Binding::Early(Owner::Parent)),
+        };
+        let early_to_late =
+            slots(|old, new| matches!(old, Binding::Early(_)) && new == Binding::Late);
         match (late_to_early.is_empty(), early_to_late.is_empty()) {
             (true, true) => BindingChange::Unchanged,
             (false, true) => BindingChange::LateToEarly {
@@ -99,6 +112,17 @@ impl SignatureBinding {
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
+pub struct EarlySlots {
+    pub function: Vec<usize>,
+    pub parent: Vec<usize>,
+}
+impl EarlySlots {
+    pub fn is_empty(&self) -> bool {
+        self.function.is_empty() && self.parent.is_empty()
+    }
+}
+
 /// Report lifetime annotation early/late binding changes.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Default, Clone, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -106,13 +130,13 @@ pub enum BindingChange {
     #[default]
     Unchanged,
     LateToEarly {
-        slots: Vec<usize>,
+        slots: EarlySlots,
     },
     EarlyToLate {
         slots: Vec<usize>,
     },
     Both {
-        late_to_early: Vec<usize>,
+        late_to_early: EarlySlots,
         early_to_late: Vec<usize>,
     },
     Incomparable,
@@ -123,6 +147,13 @@ impl BindingChange {
     }
     pub fn has_late_to_early(&self) -> bool {
         matches!(self, Self::LateToEarly { .. } | Self::Both { .. })
+    }
+    pub fn has_own_late_to_early(&self) -> bool {
+        matches!(
+            self,
+            Self::LateToEarly { slots } | Self::Both { late_to_early: slots, .. }
+                if !slots.function.is_empty()
+        )
     }
 }
 

@@ -61,9 +61,12 @@ impl BindingState {
     ) -> BTreeSet<FunctionKey> {
         changes
             .iter()
-            .filter(|(_, change)| match change {
-                BindingChange::EarlyToLate { .. } => !*ALLOW_EARLY_TO_LATE,
-                change => change.is_changed(),
+            .filter(|(_, change)| {
+                if *ALLOW_EARLY_TO_LATE {
+                    change.has_own_late_to_early()
+                } else {
+                    change.is_changed()
+                }
             })
             .map(|(def_id, _)| FunctionKey::from_rustc((tcx, *def_id)))
             .filter(|key| !self.preserved.contains(key))

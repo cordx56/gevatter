@@ -27,34 +27,50 @@ pub enum Command {
         #[arg(long)]
         show_all_diag: bool,
         /// Do not report generalizable (non-permissive) annotations
-        #[arg(short, long)]
+        #[arg(long)]
         no_generalize: bool,
-        /// Skip changes that switch lifetime parameters between early-bound and late-bound
-        #[arg(long)]
-        preserve_binding: bool,
-        /// Skip changes that switch lifetime parameters only from late-bound to early-bound
-        #[arg(long)]
-        allow_early_to_late: bool,
+        /// How strictly to keep lifetime parameters early-bound or late-bound
+        ///
+        /// 0: do not preserve; allow any change
+        /// 1: skip only changes that turn the function's own lifetime parameters
+        ///    from late-bound into early-bound
+        /// 2: fully preserve; skip every change between early-bound and late-bound
+        #[arg(
+            short,
+            long,
+            default_value_t = 1,
+            verbatim_doc_comment,
+            value_parser = clap::value_parser!(u8).range(0..=2)
+        )]
+        preserve_binding: u8,
         /// Arguments passed to `cargo check`
         #[arg(last = true)]
         args: Vec<String>,
     },
-    /// Auto fix lifetime annotations
+    /// Automatically fix lifetime annotations
     Fix {
         /// Do not fix generalizable (non-permissive) annotations
-        #[arg(short, long)]
+        #[arg(long)]
         no_generalize: bool,
-        /// Skip changes that switch lifetime parameters between early-bound and late-bound
-        #[arg(long)]
-        preserve_binding: bool,
-        /// Skip changes that switch lifetime parameters only from late-bound to early-bound
-        #[arg(long)]
-        allow_early_to_late: bool,
-        /// Passed to `cargo fix`
+        /// How strictly to keep lifetime parameters early-bound or late-bound
+        ///
+        /// 0: do not preserve; allow any change
+        /// 1: skip only changes that turn the function's own lifetime parameters
+        ///    from late-bound into early-bound
+        /// 2: fully preserve; skip every change between early-bound and late-bound
+        #[arg(
+            short,
+            long,
+            default_value_t = 1,
+            verbatim_doc_comment,
+            value_parser = clap::value_parser!(u8).range(0..=2)
+        )]
+        preserve_binding: u8,
+        /// Arguments passed to `cargo fix`
         #[arg(last = true)]
         args: Vec<String>,
     },
-    /// Toolchain related actions
+    /// Manage the Gevatter toolchain
     #[command(subcommand)]
     Toolchain(ToolchainCommand),
 }
@@ -65,15 +81,30 @@ impl Default for Command {
             allow_warnings: false,
             show_all_diag: false,
             no_generalize: false,
-            preserve_binding: false,
-            allow_early_to_late: false,
+            preserve_binding: 1,
             args: Vec::new(),
         }
     }
 }
 
+/// Environment variables that tell the driver the `--preserve-binding` level
+pub fn preserve_binding_level(level: u8) -> [(&'static str, &'static str); 2] {
+    [
+        (
+            "GEVATTER_PRESERVE_BINDING",
+            if 0 < level { "1" } else { "0" },
+        ),
+        (
+            "GEVATTER_ALLOW_EARLY_TO_LATE",
+            if level < 2 { "1" } else { "0" },
+        ),
+    ]
+}
+
 #[derive(Subcommand)]
 pub enum ToolchainCommand {
+    /// Download and install the Gevatter driver and its Rust toolchain
     Install,
+    /// Remove the installed Rust toolchains
     Remove,
 }
