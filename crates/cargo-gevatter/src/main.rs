@@ -36,15 +36,9 @@ fn main() -> ExitCode {
 
     let result = match cli.command.unwrap_or_default() {
         Command::Run { args } => {
-            let args_iter = std::iter::once("run");
-            let args: Vec<_> = if !args.is_empty() {
-                args_iter
-                    .chain(std::iter::once("--"))
-                    .chain(args.iter().map(|v| v.as_str()))
-                    .collect()
-            } else {
-                args_iter.collect()
-            };
+            let args: Vec<_> = std::iter::once("run")
+                .chain(args.iter().map(|v| v.as_str()))
+                .collect();
             exec(
                 "cargo",
                 &args,
@@ -103,7 +97,9 @@ fn main() -> ExitCode {
             args,
         } => exec(
             "cargo",
-            &[vec!["fix".to_owned()], args].concat(),
+            &std::iter::once("fix")
+                .chain(args.iter().map(|v| v.as_str()))
+                .collect::<Vec<_>>(),
             [
                 ("GEVATTER_LINT", "1"),
                 (

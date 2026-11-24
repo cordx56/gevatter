@@ -1,7 +1,17 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{
+    ColorChoice, Parser, Subcommand, ValueEnum,
+    builder::{Styles, styling::AnsiColor},
+};
+
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::BrightGreen.on_default().bold())
+    .usage(AnsiColor::BrightGreen.on_default().bold())
+    .literal(AnsiColor::BrightCyan.on_default().bold())
+    .placeholder(AnsiColor::Cyan.on_default())
+    .error(AnsiColor::BrightRed.on_default().bold());
 
 #[derive(Parser)]
-#[command(version, about, bin_name = "cargo gevatter")]
+#[command(version, about, bin_name = "cargo gevatter", color = ColorChoice::Always, styles = STYLES)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -12,7 +22,7 @@ pub enum Command {
     /// Run `cargo run` with lifetime annotations fixed in memory
     Run {
         /// Arguments passed to the program
-        #[arg(last = true, required = false)]
+        #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
     },
     /// Check lifetime annotations
@@ -38,10 +48,11 @@ pub enum Command {
         )]
         preserve_binding: PreserveBinding,
         /// Arguments passed to `cargo check`
-        #[arg(last = true)]
+        #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
     },
     /// Automatically fix lifetime annotations
+    #[command(allow_missing_positional = true)]
     Fix {
         /// Do not fix generalizable (non-permissive) annotations
         #[arg(long)]
@@ -55,7 +66,7 @@ pub enum Command {
         )]
         preserve_binding: PreserveBinding,
         /// Arguments passed to `cargo fix`
-        #[arg(last = true)]
+        #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
     },
     /// Manage the Gevatter toolchain
