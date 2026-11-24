@@ -85,8 +85,7 @@ Try removing `~/.gevatter` if there are some problems.
 To use built Gevatter:
 
 ```bash
-export GEVATTER_DRIVER="$(pwd)/target/release/gevatter_driver"
-./x ./target/release/cargo-gevatter
+./x --with-driver="target/release/gevatter_driver" ./target/release/cargo-gevatter
 ```
 
 The script `x` sets required path.

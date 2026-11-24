@@ -1,5 +1,8 @@
 use std::env;
+use std::ffi::OsString;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::LazyLock;
 use toolchain::BUILD_COMPONENTS;
@@ -29,19 +32,58 @@ fn main() {
     .expect("failed to ensure Rust toolchain");
 
     let mut args = env::args_os().skip(1);
-    let command = args.next().expect("no extra args");
+    let mut options = Vec::new();
+    let command = loop {
+        match args.next() {
+            Some(arg) => {
+                if !arg.to_string_lossy().starts_with("--") {
+                    break arg;
+                } else {
+                    options.push(arg);
+                }
+            }
+            _ => {
+                println!("Options:");
+                println!("    --with-driver=[driver]");
+                return;
+            }
+        }
+    };
 
-    let error = Command::new(command)
-        .env(
+    let mut with_driver = None;
+    for option in options {
+        if option.to_string_lossy().starts_with("--with-driver=") {
+            let split = option.to_string_lossy().find("=").unwrap();
+            let path = &option.as_bytes()[(split + 1)..];
+            with_driver = Some(
+                PathBuf::from(OsString::from_vec(path.to_vec()))
+                    .canonicalize()
+                    .expect("failed to canonicalize driver path"),
+            );
+        }
+    }
+
+    let envs = [
+        (
             "PATH",
             toolchain::prepend_paths("PATH", [toolchain_root.join("bin")])
                 .expect("failed to make PATH"),
-        )
-        .env(
+        ),
+        (
             toolchain::DYLIB_PATH,
             toolchain::prepend_paths(toolchain::DYLIB_PATH, [toolchain_root.join("lib")])
                 .expect("failed to make DYLIB_PATH"),
-        )
+        ),
+    ]
+    .into_iter()
+    .chain(
+        with_driver
+            .into_iter()
+            .map(|v| ("GEVATTER_DRIVER", v.into_os_string())),
+    );
+
+    let error = Command::new(command)
+        .envs(envs)
         .args(args)
         .env("RUSTC_BOOTSTRAP", "1")
         .exec();
