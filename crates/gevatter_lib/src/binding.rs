@@ -10,11 +10,11 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-pub static PRESERVE_BINDING: LazyLock<bool> = LazyLock::new(|| {
-    env::var("GEVATTER_PRESERVE_BINDING").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
-});
-pub static ALLOW_EARLY_TO_LATE: LazyLock<bool> = LazyLock::new(|| {
-    env::var("GEVATTER_ALLOW_EARLY_TO_LATE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
+pub static PRESERVE_BINDING: LazyLock<u8> = LazyLock::new(|| {
+    env::var("GEVATTER_PRESERVE_BINDING")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
 });
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -62,8 +62,12 @@ impl BindingState {
         changes
             .iter()
             .filter(|(_, change)| {
-                if *ALLOW_EARLY_TO_LATE {
+                if *PRESERVE_BINDING == 0 {
+                    true
+                } else if *PRESERVE_BINDING == 1 {
                     change.has_own_late_to_early()
+                } else if *PRESERVE_BINDING == 2 {
+                    change.has_late_to_early()
                 } else {
                     change.is_changed()
                 }

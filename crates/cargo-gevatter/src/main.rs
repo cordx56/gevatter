@@ -10,10 +10,10 @@ mod toolchain;
 
 use cli::{Cli, Command, ToolchainCommand};
 
-fn exec(
+fn exec<'a>(
     program: impl AsRef<OsStr>,
     args: &[impl AsRef<OsStr>],
-    options: impl IntoIterator<Item = (&'static str, &'static str)>,
+    options: impl IntoIterator<Item = (&'static str, &'a str)>,
 ) -> io::Result<()> {
     let mut command = toolchain::command(program)?;
     command.args(args).envs(options);
@@ -48,7 +48,11 @@ fn main() -> ExitCode {
             exec(
                 "cargo",
                 &args,
-                [("GEVATTER_LINT", "0"), ("GEVATTER_GENERALIZE", "1")],
+                [
+                    ("GEVATTER_LINT", "0"),
+                    ("GEVATTER_GENERALIZE", "1"),
+                    ("GEVATTER_PRESERVE_BINDING", "0"),
+                ],
             )
         }
         Command::Check {
@@ -79,6 +83,10 @@ fn main() -> ExitCode {
                         if allow_fixable { "1" } else { "0" },
                     ),
                     (
+                        "GEVATTER_PRESERVE_BINDING",
+                        &(preserve_binding as u8).to_string(),
+                    ),
+                    (
                         "CARGO_BUILD_WARNINGS",
                         if allow_warnings || allow_fixable {
                             "warn"
@@ -86,9 +94,7 @@ fn main() -> ExitCode {
                             "deny"
                         },
                     ),
-                ]
-                .into_iter()
-                .chain(cli::preserve_binding_level(preserve_binding)),
+                ],
             )
         }
         Command::Fix {
@@ -104,9 +110,11 @@ fn main() -> ExitCode {
                     "GEVATTER_GENERALIZE",
                     if !no_generalize { "1" } else { "0" },
                 ),
-            ]
-            .into_iter()
-            .chain(cli::preserve_binding_level(preserve_binding)),
+                (
+                    "GEVATTER_PRESERVE_BINDING",
+                    &(preserve_binding as u8).to_string(),
+                ),
+            ],
         ),
         Command::Toolchain(ToolchainCommand::Install) => {
             toolchain::install_toolchain().map(|path| println!("{}", path.display()))

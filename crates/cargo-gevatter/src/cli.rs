@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(version, about, bin_name = "cargo gevatter")]
@@ -30,19 +30,13 @@ pub enum Command {
         #[arg(long)]
         no_generalize: bool,
         /// How strictly to keep lifetime parameters early-bound or late-bound
-        ///
-        /// 0: do not preserve; allow any change
-        /// 1: skip only changes that turn the function's own lifetime parameters
-        ///    from late-bound into early-bound
-        /// 2: fully preserve; skip every change between early-bound and late-bound
         #[arg(
             short,
             long,
-            default_value_t = 1,
-            verbatim_doc_comment,
-            value_parser = clap::value_parser!(u8).range(0..=2)
+            value_enum,
+            default_value_t = PreserveBinding::default(),
         )]
-        preserve_binding: u8,
+        preserve_binding: PreserveBinding,
         /// Arguments passed to `cargo check`
         #[arg(last = true)]
         args: Vec<String>,
@@ -53,19 +47,13 @@ pub enum Command {
         #[arg(long)]
         no_generalize: bool,
         /// How strictly to keep lifetime parameters early-bound or late-bound
-        ///
-        /// 0: do not preserve; allow any change
-        /// 1: skip only changes that turn the function's own lifetime parameters
-        ///    from late-bound into early-bound
-        /// 2: fully preserve; skip every change between early-bound and late-bound
         #[arg(
             short,
             long,
-            default_value_t = 1,
-            verbatim_doc_comment,
-            value_parser = clap::value_parser!(u8).range(0..=2)
+            value_enum,
+            default_value_t = PreserveBinding::default(),
         )]
-        preserve_binding: u8,
+        preserve_binding: PreserveBinding,
         /// Arguments passed to `cargo fix`
         #[arg(last = true)]
         args: Vec<String>,
@@ -81,24 +69,25 @@ impl Default for Command {
             allow_warnings: false,
             show_all_diag: false,
             no_generalize: false,
-            preserve_binding: 1,
+            preserve_binding: PreserveBinding::default(),
             args: Vec::new(),
         }
     }
 }
 
-/// Environment variables that tell the driver the `--preserve-binding` level
-pub fn preserve_binding_level(level: u8) -> [(&'static str, &'static str); 2] {
-    [
-        (
-            "GEVATTER_PRESERVE_BINDING",
-            if 0 < level { "1" } else { "0" },
-        ),
-        (
-            "GEVATTER_ALLOW_EARLY_TO_LATE",
-            if level < 2 { "1" } else { "0" },
-        ),
-    ]
+#[derive(ValueEnum, Default, Clone, Copy, Debug)]
+pub enum PreserveBinding {
+    /// Do not preserve; allow any change
+    Off = 0,
+    /// Skip changes that turn the function's own lifetime parameters from late-bound into
+    /// early-bound
+    #[default]
+    Owned = 1,
+    /// Skip changes that make any late-bound lifetime early-bound, even when it only starts to
+    /// refer to a lifetime parameter of the enclosing `impl`
+    ToEarly = 2,
+    /// Fully preserve; skip every change between early-bound and late-bound
+    Full = 3,
 }
 
 #[derive(Subcommand)]

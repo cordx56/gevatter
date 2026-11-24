@@ -16,7 +16,7 @@ pub static SIMPLIFY: LazyLock<bool> = LazyLock::new(|| {
 
 /// Generalization is disabled by default
 pub static GENERALIZE: LazyLock<bool> = LazyLock::new(|| {
-    env::var("GEVATTER_GENERALIZE").is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
+    !env::var("GEVATTER_GENERALIZE").is_ok_and(|v| matches!(v.as_str(), "0" | "false"))
 });
 
 /// Lint mode; Lint is enabled by default

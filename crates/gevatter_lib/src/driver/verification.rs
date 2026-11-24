@@ -52,7 +52,7 @@ pub fn entrypoint(driver: &mut GevatterDriver, tcx: TyCtxt<'_>) -> Compilation {
         .filter(|function| matches!(function.status, FunctionStatus::Unfixable(_)))
         .map(|function| function.def_path.as_str())
         .collect();
-    let unpreserved = if *binding::PRESERVE_BINDING {
+    let unpreserved = if 0 < *binding::PRESERVE_BINDING {
         state.unpreserved(tcx, &changes)
     } else {
         BTreeSet::new()
